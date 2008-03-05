@@ -1,6 +1,15 @@
+/*
+* Author: Hong Jen Yee (PCMan) <pcman.tw (AT) gmail.com>, (C) 2006
+*
+* Copyright: See COPYING file that comes with this distribution
+*
+*/
+
 #ifdef HAVE_CONFIG_H
 #  include <config.h>
 #endif
+
+#include "private.h"
 
 #include <gtk/gtk.h>
 #include <glib.h>
@@ -9,6 +18,7 @@
 
 #include <string.h>
 
+#include <unistd.h>
 #include <sys/types.h>
 #include <fcntl.h>
 
@@ -17,13 +27,10 @@
 #include "main-window.h"
 #include "ptk-utils.h"
 
-#include "glade-support.h"
-
 #include "pref-dialog.h"
 #include "ptk-bookmarks.h"
 #include "edit-bookmarks.h"
 #include "file-properties.h"
-#include "file-assoc-dlg.h"
 #include "ptk-path-entry.h"
 
 #include "settings.h"
@@ -37,6 +44,8 @@
 
 #include "vfs-app-desktop.h"
 #include "vfs-execute.h"
+
+#include "ptk-ui-xml.h"
 
 static void fm_main_window_class_init( FMMainWindowClass* klass );
 static void fm_main_window_init( FMMainWindow* main_window );
@@ -56,10 +65,15 @@ static GtkWidget* create_bookmarks_menu_item ( FMMainWindow* main_window,
 
 static gboolean fm_main_window_delete_event ( GtkWidget *widget,
                                               GdkEvent *event );
+#if 0
 static void fm_main_window_destroy ( GtkObject *object );
+#endif
 
 static gboolean fm_main_window_key_press_event ( GtkWidget *widget,
                                                  GdkEventKey *event );
+
+static gboolean fm_main_window_window_state_event ( GtkWidget *widget,
+                                                    GdkEventWindowState *event );
 
 
 /* Signal handlers */
@@ -81,14 +95,18 @@ static void on_new_text_file_activate ( GtkMenuItem *menuitem,
                                         gpointer user_data );
 static void on_preference_activate ( GtkMenuItem *menuitem,
                                      gpointer user_data );
+#if 0
 static void on_file_assoc_activate ( GtkMenuItem *menuitem,
                                      gpointer user_data );
+#endif
 static void on_about_activate ( GtkMenuItem *menuitem,
                                 gpointer user_data );
+#if 0
 static gboolean on_back_btn_popup_menu ( GtkWidget *widget,
                                          gpointer user_data );
 static gboolean on_forward_btn_popup_menu ( GtkWidget *widget,
                                             gpointer user_data );
+#endif
 static void on_address_bar_activate ( GtkWidget *entry,
                                       gpointer user_data );
 static void on_new_window_activate ( GtkMenuItem *menuitem,
@@ -165,6 +183,8 @@ static void on_bookmark_item_activate ( GtkMenuItem* menu, gpointer user_data );
 static void on_file_browser_before_chdir( PtkFileBrowser* file_browser,
                                           const char* path, gboolean* cancel,
                                           FMMainWindow* main_window );
+static void on_file_browser_begin_chdir( PtkFileBrowser* file_browser,
+                                         FMMainWindow* main_window );
 static void on_file_browser_open_item( PtkFileBrowser* file_browser,
                                        const char* path, PtkOpenAction action,
                                        FMMainWindow* main_window );
@@ -256,8 +276,9 @@ void fm_main_window_class_init( FMMainWindowClass* klass )
     object_class->finalize = fm_main_window_finalize;
 
     widget_class = GTK_WIDGET_CLASS ( klass );
-    widget_class->delete_event = fm_main_window_delete_event;
+    widget_class->delete_event = (gpointer) fm_main_window_delete_event;
     widget_class->key_press_event = fm_main_window_key_press_event;
+    widget_class->window_state_event = fm_main_window_window_state_event;
 }
 
 
@@ -378,8 +399,8 @@ static PtkMenuItemEntry fm_menu_bar[] =
 static PtkToolItemEntry fm_toolbar_btns[] =
     {
         PTK_TOOL_ITEM( N_( "New Tab" ), "gtk-add", N_( "New Tab" ), on_new_tab_activate ),
-        PTK_TOOL_ITEM( N_( "Back" ), "gtk-go-back", N_( "Back" ), on_back_activate ),
-        PTK_TOOL_ITEM( N_( "Forward" ), "gtk-go-forward", N_( "Forward" ), on_forward_activate ),
+        PTK_MENU_TOOL_ITEM( N_( "Back" ), "gtk-go-back", N_( "Back" ), G_CALLBACK(on_back_activate), PTK_EMPTY_MENU ),
+        PTK_MENU_TOOL_ITEM( N_( "Forward" ), "gtk-go-forward", N_( "Forward" ), G_CALLBACK(on_forward_activate), PTK_EMPTY_MENU ),
         PTK_TOOL_ITEM( N_( "Parent Folder" ), "gtk-go-up", N_( "Parent Folder" ), on_up_activate ),
         PTK_TOOL_ITEM( N_( "Refresh" ), "gtk-refresh", N_( "Refresh" ), on_refresh_activate ),
         PTK_TOOL_ITEM( N_( "Home Directory" ), "gtk-home", N_( "Home Directory" ), on_home_activate ),
@@ -393,15 +414,76 @@ static PtkToolItemEntry fm_toolbar_jump_btn[] =
         PTK_TOOL_END
     };
 
+static void update_window_icon( GtkIconTheme* theme, GtkWindow* window )
+{
+    GdkPixbuf* icon;
+    icon = gtk_icon_theme_load_icon( theme, "gnome-fs-directory", 48, 0, NULL );
+    gtk_window_set_icon( window, icon );
+    g_object_unref( icon );
+}
+
+static void on_history_menu_item_activate( GtkWidget* menu_item, FMMainWindow* main_window )
+{
+    GList* l = (GList*)g_object_get_data( G_OBJECT(menu_item), "path"), *tmp;
+    PtkFileBrowser* fb = (PtkFileBrowser*)fm_main_window_get_current_file_browser(main_window);
+    tmp = fb->curHistory;
+    fb->curHistory = l;
+    if( !  ptk_file_browser_chdir( fb, (char*)l->data, PTK_FB_CHDIR_NO_HISTORY ) )
+        fb->curHistory = tmp;
+}
+
+static void remove_all_menu_items( GtkWidget* menu, gpointer user_data )
+{
+    gtk_container_foreach( (GtkContainer*)menu, (GtkCallback)gtk_widget_destroy, NULL );
+}
+
+static GtkWidget* add_history_menu_item( FMMainWindow* main_window, GtkWidget* menu, GList* l )
+{
+    GtkWidget* menu_item, *folder_image;
+    char *disp_name;
+    disp_name = g_filename_display_basename( (char*)l->data );
+    menu_item = gtk_image_menu_item_new_with_label( disp_name );
+    g_object_set_data( G_OBJECT( menu_item ), "path", l );
+    folder_image = gtk_image_new_from_icon_name( "gnome-fs-directory",
+                                                 GTK_ICON_SIZE_MENU );
+    gtk_image_menu_item_set_image ( GTK_IMAGE_MENU_ITEM ( menu_item ),
+                                    folder_image );
+    g_signal_connect( menu_item, "activate",
+                      G_CALLBACK( on_history_menu_item_activate ), main_window );
+
+    gtk_menu_shell_append( GTK_MENU_SHELL(menu), menu_item );
+    return menu_item;
+}
+
+static void on_show_history_menu( GtkMenuToolButton* btn, FMMainWindow* main_window )
+{
+    GtkMenuShell* menu = (GtkMenuShell*)gtk_menu_tool_button_get_menu(btn);
+    GList *l;
+    PtkFileBrowser* fb = (PtkFileBrowser*)fm_main_window_get_current_file_browser(main_window);
+
+    if( btn == (GtkMenuToolButton *) main_window->back_btn )  /* back history */
+    {
+        for( l = fb->curHistory->prev; l != NULL; l = l->prev )
+            add_history_menu_item( main_window, GTK_WIDGET(menu), l );
+    }
+    else    /* forward history */
+    {
+        for( l = fb->curHistory->next; l != NULL; l = l->next )
+            add_history_menu_item( main_window, GTK_WIDGET(menu), l );
+    }
+    gtk_widget_show_all( GTK_WIDGET(menu) );
+}
+
 void fm_main_window_init( FMMainWindow* main_window )
 {
     GtkWidget *bookmark_menu;
     GtkWidget *view_menu_item;
-    GtkWidget *edit_menu_item, *edit_menu;
+    GtkWidget *edit_menu_item, *edit_menu, *history_menu;
     GtkToolItem *toolitem;
     GtkWidget *hbox;
     GtkLabel *label;
     GtkAccelGroup *edit_accel_group;
+    GClosure* closure;
 
     /* Initialize parent class */
     GTK_WINDOW( main_window ) ->type = GTK_WINDOW_TOPLEVEL;
@@ -414,8 +496,13 @@ void fm_main_window_init( FMMainWindow* main_window )
     ptk_bookmarks_add_callback( ( GFunc ) on_bookmarks_change, main_window );
 
     /* Start building GUI */
+    /*
+    NOTE: gtk_window_set_icon_name doesn't work under some WMs, such as IceWM.
     gtk_window_set_icon_name( GTK_WINDOW( main_window ),
-                              "gnome-fs-directory" );
+                              "gnome-fs-directory" ); */
+    g_signal_connect( gtk_icon_theme_get_default(), "changed",
+                                    G_CALLBACK(update_window_icon), main_window );
+    update_window_icon( gtk_icon_theme_get_default(), GTK_WINDOW(main_window) );
 
     main_window->main_vbox = gtk_vbox_new ( FALSE, 0 );
     gtk_container_add ( GTK_CONTAINER ( main_window ), main_window->main_vbox );
@@ -428,31 +515,31 @@ void fm_main_window_init( FMMainWindow* main_window )
                          main_window->menu_bar, FALSE, FALSE, 0 );
 
     main_window->accel_group = gtk_accel_group_new ();
-    fm_side_pane_menu[ 0 ].ret = ( GtkWidget** ) & main_window->open_side_pane_menu;
-    fm_side_pane_menu[ 2 ].ret = ( GtkWidget** ) & main_window->show_location_menu;
-    fm_side_pane_menu[ 3 ].ret = ( GtkWidget** ) & main_window->show_dir_tree_menu;
-    fm_view_menu[ 3 ].ret = ( GtkWidget** ) & main_window->show_hidden_files_menu;
-    fm_view_menu[ 6 ].ret = ( GtkWidget** ) & main_window->view_as_icon;
-    fm_view_menu[ 7 ].ret = ( GtkWidget** ) & main_window->view_as_list;
-    fm_sort_menu[ 0 ].ret = ( GtkWidget** ) & main_window->sort_by_name;
-    fm_sort_menu[ 1 ].ret = ( GtkWidget** ) & main_window->sort_by_size;
-    fm_sort_menu[ 2 ].ret = ( GtkWidget** ) & main_window->sort_by_mtime;
-    fm_sort_menu[ 3 ].ret = ( GtkWidget** ) & main_window->sort_by_type;
-    fm_sort_menu[ 4 ].ret = ( GtkWidget** ) & main_window->sort_by_perm;
-    fm_sort_menu[ 5 ].ret = ( GtkWidget** ) & main_window->sort_by_owner;
-    fm_sort_menu[ 7 ].ret = ( GtkWidget** ) & main_window->sort_ascending;
-    fm_sort_menu[ 8 ].ret = ( GtkWidget** ) & main_window->sort_descending;
+    fm_side_pane_menu[ 0 ].ret = ( GtkWidget** ) (GtkWidget*) & main_window->open_side_pane_menu;
+    fm_side_pane_menu[ 2 ].ret = ( GtkWidget** ) (GtkWidget*) & main_window->show_location_menu;
+    fm_side_pane_menu[ 3 ].ret = ( GtkWidget** ) (GtkWidget*) & main_window->show_dir_tree_menu;
+    fm_view_menu[ 3 ].ret = ( GtkWidget** ) (GtkWidget*) & main_window->show_hidden_files_menu;
+    fm_view_menu[ 6 ].ret = ( GtkWidget** ) (GtkWidget*) & main_window->view_as_icon;
+    fm_view_menu[ 7 ].ret = ( GtkWidget** ) (GtkWidget*) & main_window->view_as_list;
+    fm_sort_menu[ 0 ].ret = ( GtkWidget** ) (GtkWidget*) & main_window->sort_by_name;
+    fm_sort_menu[ 1 ].ret = ( GtkWidget** ) (GtkWidget*) & main_window->sort_by_size;
+    fm_sort_menu[ 2 ].ret = ( GtkWidget** ) (GtkWidget*) & main_window->sort_by_mtime;
+    fm_sort_menu[ 3 ].ret = ( GtkWidget** ) (GtkWidget*) & main_window->sort_by_type;
+    fm_sort_menu[ 4 ].ret = ( GtkWidget** ) (GtkWidget*) & main_window->sort_by_perm;
+    fm_sort_menu[ 5 ].ret = ( GtkWidget** ) (GtkWidget*) & main_window->sort_by_owner;
+    fm_sort_menu[ 7 ].ret = ( GtkWidget** ) (GtkWidget*) & main_window->sort_ascending;
+    fm_sort_menu[ 8 ].ret = ( GtkWidget** ) (GtkWidget*) & main_window->sort_descending;
     fm_menu_bar[ 1 ].ret = &edit_menu_item;
     fm_menu_bar[ 3 ].ret = &main_window->bookmarks;
     fm_menu_bar[ 4 ].ret = &view_menu_item;
     ptk_menu_add_items_from_data( main_window->menu_bar, fm_menu_bar,
                                   main_window, main_window->accel_group );
-    /* This accel_group is useless and just used to show 
-       shortcuts in edit menu. These shortcuts are 
+    /* This accel_group is useless and just used to show
+       shortcuts in edit menu. These shortcuts are
        provided by PtkFileBrowser itself. */
     edit_accel_group = gtk_accel_group_new();
     edit_menu = ptk_menu_new_from_data( fm_edit_menu, main_window, edit_accel_group );
-    g_object_weak_ref( G_OBJECT(edit_menu), g_object_unref, edit_accel_group);
+    g_object_weak_ref( G_OBJECT(edit_menu), (GWeakNotify) g_object_unref, edit_accel_group);
 
     gtk_menu_item_set_submenu( GTK_MENU_ITEM( edit_menu_item ), edit_menu );
     bookmark_menu = create_bookmarks_menu( main_window );
@@ -470,10 +557,21 @@ void fm_main_window_init( FMMainWindow* main_window )
     main_window->tooltips = gtk_tooltips_new ();
     fm_toolbar_btns[ 1 ].ret = &main_window->back_btn;
     fm_toolbar_btns[ 2 ].ret = &main_window->forward_btn;
-    fm_toolbar_btns[ 6 ].ret = ( GtkWidget** ) & main_window->open_side_pane_btn;
+    fm_toolbar_btns[ 6 ].ret = ( GtkWidget** ) (GtkWidget*) & main_window->open_side_pane_btn;
     ptk_toolbar_add_items_from_data( ( main_window->toolbar ),
                                      fm_toolbar_btns,
                                      main_window, main_window->tooltips );
+
+    /* setup history menu */
+    history_menu = gtk_menu_new();  /* back history */
+    g_signal_connect( history_menu, "selection-done", G_CALLBACK(remove_all_menu_items), NULL );
+    gtk_menu_tool_button_set_menu( (GtkMenuToolButton*)main_window->back_btn, history_menu );
+    g_signal_connect( main_window->back_btn, "show-menu", G_CALLBACK(on_show_history_menu), main_window );
+
+    history_menu = gtk_menu_new();  /* forward history */
+    g_signal_connect( history_menu, "selection-done", G_CALLBACK(remove_all_menu_items), NULL );
+    gtk_menu_tool_button_set_menu( (GtkMenuToolButton*)main_window->forward_btn, history_menu );
+    g_signal_connect( main_window->forward_btn, "show-menu", G_CALLBACK(on_show_history_menu), main_window );
 
     toolitem = gtk_tool_item_new ();
     gtk_tool_item_set_expand ( toolitem, TRUE );
@@ -482,29 +580,34 @@ void fm_main_window_init( FMMainWindow* main_window )
     hbox = gtk_hbox_new ( FALSE, 0 );
     gtk_container_add ( GTK_CONTAINER ( toolitem ), hbox );
 
-    /* FIXME: Is this label required? What about the hotkey? */
-    label = ( GtkLabel* ) gtk_label_new_with_mnemonic ( _( "A_ddress:" ) );
-    gtk_box_pack_start ( GTK_BOX ( hbox ), ( GtkWidget* ) label, FALSE, FALSE, 0 );
-    gtk_label_set_justify ( label, GTK_JUSTIFY_FILL );
-    gtk_misc_set_padding ( GTK_MISC ( label ), 6, 0 );
-
-    /*
-    gtk_box_pack_start ( GTK_BOX ( hbox ), gtk_separator_tool_item_new(),
+    gtk_box_pack_start ( GTK_BOX ( hbox ), (GtkWidget *) gtk_separator_tool_item_new(),
                          FALSE, FALSE, 0 );
-    */
 
     main_window->address_bar = ( GtkEntry* ) ptk_path_entry_new ();
+/*
+    gtk_tooltips_set_tip( main_window->tooltips, main_window->address_bar,
+            ("Useful tips: \n1. Shortcut keys \'Alt+D\' or \'Ctrl+L\' can focus this bar.\n"
+                "2. Left click on the path with \'Ctrl\' key held down can bring you to parent folders."), NULL );
+*/
+
+    /* Add shortcut keys Alt+D and Ctrl+L for the address bar */
+    closure = g_cclosure_new_swap( G_CALLBACK(gtk_widget_grab_focus), main_window->address_bar, NULL );
+    gtk_accel_group_connect( main_window->accel_group, GDK_L, GDK_CONTROL_MASK, 0, closure );
+
+    closure = g_cclosure_new_swap( G_CALLBACK(gtk_widget_grab_focus), main_window->address_bar, NULL );
+    gtk_accel_group_connect( main_window->accel_group, GDK_D, GDK_MOD1_MASK, 0, closure );
+
     g_signal_connect( main_window->address_bar, "activate",
-                      on_address_bar_activate, main_window );
+                      G_CALLBACK(on_address_bar_activate), main_window );
     gtk_box_pack_start ( GTK_BOX ( hbox ), GTK_WIDGET( main_window->address_bar ), TRUE, TRUE, 0 );
     ptk_toolbar_add_items_from_data( ( main_window->toolbar ),
                                      fm_toolbar_jump_btn,
                                      main_window, main_window->tooltips );
 
-    gtk_label_set_mnemonic_widget ( GTK_LABEL ( label ), GTK_WIDGET( main_window->address_bar ) );
     gtk_window_add_accel_group ( GTK_WINDOW ( main_window ), main_window->accel_group );
     gtk_widget_grab_focus ( GTK_WIDGET( main_window->address_bar ) );
 
+#ifdef SUPER_USER_CHECKS
     /* Create warning bar for super user */
     if ( geteuid() == 0 )                 /* Run as super user! */
     {
@@ -519,6 +622,7 @@ void fm_main_window_init( FMMainWindow* main_window )
         gtk_box_pack_start ( GTK_BOX ( main_window->main_vbox ),
                              main_window->status_bar, FALSE, FALSE, 2 );
     }
+#endif
 
     /* Create client area */
     main_window->notebook = GTK_NOTEBOOK( gtk_notebook_new () );
@@ -546,7 +650,6 @@ void fm_main_window_finalize( GObject *obj )
 
     /* Remove the monitor for changes of the bookmarks */
     ptk_bookmarks_remove_callback( ( GFunc ) on_bookmarks_change, obj );
-
     if ( 0 == n_windows && !appSettings.showDesktop )
         gtk_main_quit();
     G_OBJECT_CLASS( parent_class ) ->finalize( obj );
@@ -577,6 +680,13 @@ fm_main_window_delete_event ( GtkWidget *widget,
                               GdkEvent *event )
 {
     fm_main_window_close( widget );
+    return TRUE;
+}
+
+static gboolean fm_main_window_window_state_event ( GtkWidget *widget,
+                                                    GdkEventWindowState *event )
+{
+    appSettings.maximized = ((event->new_window_state & GDK_WINDOW_STATE_MAXIMIZED) != 0);
     return TRUE;
 }
 
@@ -645,13 +755,13 @@ static GtkWidget* fm_main_window_create_tab_label( FMMainWindow* main_window,
 void fm_main_window_add_new_tab( FMMainWindow* main_window,
                                  const char* folder_path,
                                  gboolean open_side_pane,
-                                 PtkFileBrowserSidePaneMode side_pane_mode )
+                                 PtkFBSidePaneMode side_pane_mode )
 {
     GtkWidget * tab_label;
     gint idx;
     GtkNotebook* notebook = GTK_NOTEBOOK( main_window->notebook );
-    PtkFileBrowser* file_browser = PTK_FILE_BROWSER( ptk_file_browser_new ( GTK_WIDGET( main_window ),
-                                                                            appSettings.viewMode ) );
+    PtkFileBrowser* file_browser = (PtkFileBrowser*)ptk_file_browser_new ( GTK_WIDGET( main_window ),
+                                                                            appSettings.viewMode );
     gtk_paned_set_position ( GTK_PANED ( file_browser ), main_window->splitter_pos );
     ptk_file_browser_show_hidden_files( file_browser,
                                         appSettings.showHiddenFiles );
@@ -672,6 +782,8 @@ void fm_main_window_add_new_tab( FMMainWindow* main_window,
 
     g_signal_connect( file_browser, "before-chdir",
                       G_CALLBACK( on_file_browser_before_chdir ), main_window );
+    g_signal_connect( file_browser, "begin-chdir",
+                      G_CALLBACK( on_file_browser_begin_chdir ), main_window );
     g_signal_connect( file_browser, "after-chdir",
                       G_CALLBACK( on_file_browser_after_chdir ), main_window );
     g_signal_connect( file_browser, "open-item",
@@ -687,6 +799,9 @@ void fm_main_window_add_new_tab( FMMainWindow* main_window,
 
     tab_label = fm_main_window_create_tab_label( main_window, file_browser );
     idx = gtk_notebook_append_page( notebook, GTK_WIDGET( file_browser ), tab_label );
+#if GTK_CHECK_VERSION( 2, 10, 0 )
+    gtk_notebook_set_tab_reorderable( notebook, GTK_WIDGET( file_browser ), TRUE );
+#endif
     gtk_notebook_set_current_page ( notebook, idx );
 
     if ( gtk_notebook_get_n_pages ( notebook ) > 1 )
@@ -694,7 +809,7 @@ void fm_main_window_add_new_tab( FMMainWindow* main_window,
     else
         gtk_notebook_set_show_tabs( notebook, FALSE );
 
-    ptk_file_browser_chdir( file_browser, folder_path, TRUE );
+    ptk_file_browser_chdir( file_browser, folder_path, PTK_FB_CHDIR_ADD_HISTORY );
 
     gtk_widget_grab_focus( GTK_WIDGET( file_browser->folder_view ) );
 }
@@ -729,19 +844,15 @@ void on_forward_activate( GtkToolButton *toolbutton, FMMainWindow *main_window )
 
 void on_up_activate( GtkToolButton *toolbutton, FMMainWindow *main_window )
 {
-    char * parent_dir;
     PtkFileBrowser* file_browser = PTK_FILE_BROWSER( fm_main_window_get_current_file_browser( main_window ) );
-
-    parent_dir = g_path_get_dirname( ptk_file_browser_get_cwd( file_browser ) );
-    ptk_file_browser_chdir( file_browser, parent_dir, TRUE );
-    g_free( parent_dir );
+    ptk_file_browser_go_up( file_browser );
 }
 
 
 void on_home_activate( GtkToolButton *toolbutton, FMMainWindow *main_window )
 {
     GtkWidget * file_browser = fm_main_window_get_current_file_browser( main_window );
-    ptk_file_browser_chdir( PTK_FILE_BROWSER( file_browser ), g_get_home_dir(), TRUE );
+    ptk_file_browser_chdir( PTK_FILE_BROWSER( file_browser ), g_get_home_dir(), PTK_FB_CHDIR_ADD_HISTORY );
 }
 
 
@@ -751,18 +862,18 @@ void on_address_bar_activate ( GtkWidget *entry,
     FMMainWindow * main_window = FM_MAIN_WINDOW( user_data );
     gchar *dir_path, *final_path;
     PtkFileBrowser* file_browser = PTK_FILE_BROWSER( fm_main_window_get_current_file_browser( main_window ) );
-
+    gtk_editable_select_region( (GtkEditable*)entry, 0, 0 );    /* clear selection */
     /* Convert to on-disk encoding */
     dir_path = g_filename_from_utf8( gtk_entry_get_text( GTK_ENTRY( entry ) ), -1,
                                      NULL, NULL, NULL );
     final_path = vfs_file_resolve_path( ptk_file_browser_get_cwd(file_browser), dir_path );
     g_free( dir_path );
-    ptk_file_browser_chdir( file_browser, final_path, TRUE );
+    ptk_file_browser_chdir( file_browser, final_path, PTK_FB_CHDIR_ADD_HISTORY );
     g_free( final_path );
     gtk_widget_grab_focus( GTK_WIDGET( file_browser->folder_view ) );
 }
 
-#if 0 
+#if 0
 /* This is not needed by a file manager */
 /* Patched by <cantona@cantona.net> */
 void on_fullscreen_activate ( GtkMenuItem *menuitem,
@@ -829,6 +940,12 @@ on_preference_activate ( GtkMenuItem *menuitem,
     fm_main_window_preference( main_window );
 }
 
+static void
+dir_unload_thumbnails( const char* path, VFSDir* dir, gpointer user_data )
+{
+    vfs_dir_unload_thumbnails( dir, (gboolean)user_data );
+}
+
 void fm_main_window_preference( FMMainWindow* main_window )
 {
     int max_thumb = appSettings.maxThumbSize;
@@ -875,6 +992,13 @@ void fm_main_window_preference( FMMainWindow* main_window )
     {
         vfs_mime_type_set_icon_size( appSettings.bigIconSize, appSettings.smallIconSize );
         vfs_file_info_set_thumbnail_size( appSettings.bigIconSize, appSettings.smallIconSize );
+
+        /* unload old thumbnails (icons of *.desktop files will be unloaded here, too)  */
+        if( big_icon != appSettings.bigIconSize )
+            vfs_dir_foreach( (GHFunc)dir_unload_thumbnails, (gpointer)TRUE );
+        if( small_icon != appSettings.smallIconSize )
+            vfs_dir_foreach( (GHFunc)dir_unload_thumbnails, (gpointer)FALSE );
+
         for ( l = all_windows; l; l = l->next )
         {
             main_window = FM_MAIN_WINDOW( l->data );
@@ -916,6 +1040,7 @@ void fm_main_window_preference( FMMainWindow* main_window )
     save_settings();
 }
 
+#if 0
 void
 on_file_assoc_activate ( GtkMenuItem *menuitem,
                          gpointer user_data )
@@ -923,37 +1048,38 @@ on_file_assoc_activate ( GtkMenuItem *menuitem,
     GtkWindow * main_window = GTK_WINDOW( user_data );
     edit_file_associations( main_window );
 }
+#endif
+
+/* callback used to open default browser when URLs got clicked */
+static void open_url( GtkAboutDialog *dlg, const gchar *url, gpointer data)
+{
+    /* FIXME: is there any better way to do this? */
+    char* programs[] = { "xdg-open", "gnome-open" /* Sorry, KDE users. :-P */, "exo-open" };
+    int i;
+    for(  i = 0; i < G_N_ELEMENTS(programs); ++i)
+    {
+        char* open_cmd = NULL;
+        if( (open_cmd = g_find_program_in_path( programs[i] )) )
+        {
+             char* cmd = g_strdup_printf( "%s \'%s\'", open_cmd, url );
+             g_spawn_command_line_async( cmd, NULL );
+             g_free( cmd );
+             g_free( open_cmd );
+             break;
+        }
+    }
+}
 
 void
 on_about_activate ( GtkMenuItem *menuitem,
                     gpointer user_data )
 {
     GtkWidget * aboutDialog;
-    const gchar *authors[] =
-        {
-            "洪任諭 Hong Jen Yee <pcman.tw@gmail.com>\n",
-            _("Source code taken from other projects:"),
-            _(" * xdgmime: Red Hat, Inc & Jonathan Blandford"),
-            _(" * libmd5-rfc: Aladdin Enterprises"),
-            _(" * Working area detection: Gary Kramlich"),
-            _(" * ExoIconView: os-cillation e.K, Anders Carlsson, & Benedikt Meurer"),
-            _(" * Text and icon renderer uese code from Jonathan Blandford"),
-            _(" * Desktop icons use code from Brian Tarricone"),
-            NULL
-        };
-    /* TRANSLATORS: Replace this string with your names, one name per line. */
-    gchar *translators = _( "translator-credits" );
+    gtk_about_dialog_set_url_hook( open_url, NULL, NULL);
 
-    aboutDialog = gtk_about_dialog_new ();
-    gtk_container_set_border_width ( GTK_CONTAINER ( aboutDialog ), 2 );
+    aboutDialog = ptk_ui_xml_create_widget_from_file( PACKAGE_UI_DIR "/about-dlg.glade" );
     gtk_about_dialog_set_version ( GTK_ABOUT_DIALOG ( aboutDialog ), VERSION );
-    gtk_about_dialog_set_name ( GTK_ABOUT_DIALOG ( aboutDialog ), _( "PCMan File Manager" ) );
-    gtk_about_dialog_set_copyright ( GTK_ABOUT_DIALOG ( aboutDialog ), _( "Copyright (C) 2005 - 2006" ) );
-    gtk_about_dialog_set_comments ( GTK_ABOUT_DIALOG ( aboutDialog ), _( "Lightweight file manager\n\nDeveloped by Hon Jen Yee (PCMan)" ) );
-    gtk_about_dialog_set_license ( GTK_ABOUT_DIALOG ( aboutDialog ), "PCMan File Manager\n\nCopyright (C) 2005 - 2006 Hong Jen Yee (PCMan)\n\nThis program is free software; you can redistribute it and/or\nmodify it under the terms of the GNU General Public License\nas published by the Free Software Foundation; either version 2\nof the License, or (at your option) any later version.\n\nThis program is distributed in the hope that it will be useful,\nbut WITHOUT ANY WARRANTY; without even the implied warranty of\nMERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\nGNU General Public License for more details.\n\nYou should have received a copy of the GNU General Public License\nalong with this program; if not, write to the Free Software\nFoundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA." );
-    gtk_about_dialog_set_website ( GTK_ABOUT_DIALOG ( aboutDialog ), "http://pcmanfm.sourceforge.net/" );
-    gtk_about_dialog_set_authors ( GTK_ABOUT_DIALOG ( aboutDialog ), authors );
-    gtk_about_dialog_set_translator_credits ( GTK_ABOUT_DIALOG ( aboutDialog ), translators );
+    gtk_about_dialog_set_logo_icon_name( GTK_ABOUT_DIALOG ( aboutDialog ), "pcmanfm" );
     gtk_window_set_transient_for( GTK_WINDOW( aboutDialog ), GTK_WINDOW( user_data ) );
 
     gtk_dialog_run( GTK_DIALOG( aboutDialog ) );
@@ -961,31 +1087,35 @@ on_about_activate ( GtkMenuItem *menuitem,
 }
 
 
+#if 0
 gboolean
 on_back_btn_popup_menu ( GtkWidget *widget,
                          gpointer user_data )
 {
     /*
     GtkWidget* file_browser = fm_main_window_get_current_file_browser( widget );
-    */ 
+    */
     return FALSE;
 }
+#endif
 
 
+#if 0
 gboolean
 on_forward_btn_popup_menu ( GtkWidget *widget,
                             gpointer user_data )
 {
     /*
     GtkWidget* file_browser = fm_main_window_get_current_file_browser( widget );
-    */ 
+    */
     return FALSE;
 }
+#endif
 
 void fm_main_window_add_new_window( FMMainWindow* main_window,
                                     const char* path,
                                     gboolean open_side_pane,
-                                    PtkFileBrowserSidePaneMode side_pane_mode )
+                                    PtkFBSidePaneMode side_pane_mode )
 {
     GtkWidget * new_win = fm_main_window_new();
     FM_MAIN_WINDOW( new_win ) ->splitter_pos = main_window->splitter_pos;
@@ -1026,7 +1156,7 @@ on_new_tab_activate ( GtkMenuItem *menuitem,
     PtkFileBrowser * file_browser;
     const char* path;
     gboolean show_side_pane;
-    PtkFileBrowserSidePaneMode side_pane_mode;
+    PtkFBSidePaneMode side_pane_mode;
 
     FMMainWindow* main_window = FM_MAIN_WINDOW( user_data );
     file_browser = PTK_FILE_BROWSER( fm_main_window_get_current_file_browser( main_window ) );
@@ -1076,18 +1206,23 @@ on_folder_notebook_switch_pape ( GtkNotebook *notebook,
 
     if( file_browser->dir && (disp_path = file_browser->dir->disp_path) )
     {
+        char* disp_name = g_path_get_basename( disp_path );
         gtk_entry_set_text( main_window->address_bar, disp_path );
-        gtk_window_set_title( GTK_WINDOW( main_window ), disp_path );
+        gtk_window_set_title( GTK_WINDOW( main_window ), disp_name );
+        g_free( disp_name );
     }
     else
     {
         path = ptk_file_browser_get_cwd( file_browser );
         if ( path )
         {
+            char* disp_name;
             disp_path = g_filename_display_name( path );
             gtk_entry_set_text( main_window->address_bar, disp_path );
-            gtk_window_set_title( GTK_WINDOW( main_window ), disp_path );
+            disp_name = g_path_get_basename( disp_path );
             g_free( disp_path );
+            gtk_window_set_title( GTK_WINDOW( main_window ), disp_name );
+            g_free( disp_name );
         }
     }
     g_idle_add( ( GSourceFunc ) delayed_focus, file_browser->folder_view );
@@ -1152,8 +1287,6 @@ on_edit_bookmark_activate ( GtkMenuItem *menuitem,
                             gpointer user_data )
 {
     FMMainWindow * main_window = FM_MAIN_WINDOW( user_data );
-    GtkWidget* bookmark;
-    GtkWidget* bookmark_menu;
 
     edit_bookmarks( GTK_WINDOW( main_window ) );
 }
@@ -1167,10 +1300,7 @@ void
 on_add_to_bookmark_activate ( GtkMenuItem *menuitem,
                               gpointer user_data )
 {
-    GList * l;
     FMMainWindow* main_window = FM_MAIN_WINDOW( user_data );
-    GtkWidget* bookmark;
-    GtkWidget* bookmark_menu;
     GtkWidget* file_browser = fm_main_window_get_current_file_browser( main_window );
     const char* path = ptk_file_browser_get_cwd( PTK_FILE_BROWSER( file_browser ) );
     gchar* name;
@@ -1269,14 +1399,14 @@ void on_show_dir_tree ( GtkMenuItem *menuitem, gpointer user_data )
     int i, n;
     if ( ! GTK_CHECK_MENU_ITEM( menuitem ) ->active )
         return ;
-    appSettings.sidePaneMode = FB_SIDE_PANE_DIR_TREE;
+    appSettings.sidePaneMode = PTK_FB_SIDE_PANE_DIR_TREE;
 
     n = gtk_notebook_get_n_pages( main_window->notebook );
     for ( i = 0; i < n; ++i )
     {
         file_browser = PTK_FILE_BROWSER( gtk_notebook_get_nth_page(
                                              main_window->notebook, i ) );
-        ptk_file_browser_set_side_pane_mode( file_browser, FB_SIDE_PANE_DIR_TREE );
+        ptk_file_browser_set_side_pane_mode( file_browser, PTK_FB_SIDE_PANE_DIR_TREE );
     }
 }
 
@@ -1287,13 +1417,13 @@ void on_show_loation_pane ( GtkMenuItem *menuitem, gpointer user_data )
     int i, n;
     if ( ! GTK_CHECK_MENU_ITEM( menuitem ) ->active )
         return ;
-    appSettings.sidePaneMode = FB_SIDE_PANE_BOOKMARKS;
+    appSettings.sidePaneMode = PTK_FB_SIDE_PANE_BOOKMARKS;
     n = gtk_notebook_get_n_pages( main_window->notebook );
     for ( i = 0; i < n; ++i )
     {
         file_browser = PTK_FILE_BROWSER( gtk_notebook_get_nth_page(
                                              main_window->notebook, i ) );
-        ptk_file_browser_set_side_pane_mode( file_browser, FB_SIDE_PANE_BOOKMARKS );
+        ptk_file_browser_set_side_pane_mode( file_browser, PTK_FB_SIDE_PANE_BOOKMARKS );
     }
 }
 
@@ -1316,7 +1446,7 @@ on_sort_by_name_activate ( GtkMenuItem *menuitem,
 {
     FMMainWindow * main_window = FM_MAIN_WINDOW( user_data );
     GtkWidget* file_browser = fm_main_window_get_current_file_browser( main_window );
-    appSettings.sortOrder = FB_SORT_BY_NAME;
+    appSettings.sortOrder = PTK_FB_SORT_BY_NAME;
     if ( file_browser )
         ptk_file_browser_set_sort_order( PTK_FILE_BROWSER( file_browser ), appSettings.sortOrder );
 }
@@ -1328,7 +1458,7 @@ on_sort_by_size_activate ( GtkMenuItem *menuitem,
 {
     FMMainWindow * main_window = FM_MAIN_WINDOW( user_data );
     GtkWidget* file_browser = fm_main_window_get_current_file_browser( main_window );
-    appSettings.sortOrder = FB_SORT_BY_SIZE;
+    appSettings.sortOrder = PTK_FB_SORT_BY_SIZE;
     if ( file_browser )
         ptk_file_browser_set_sort_order( PTK_FILE_BROWSER( file_browser ), appSettings.sortOrder );
 }
@@ -1340,7 +1470,7 @@ on_sort_by_mtime_activate ( GtkMenuItem *menuitem,
 {
     FMMainWindow * main_window = FM_MAIN_WINDOW( user_data );
     GtkWidget* file_browser = fm_main_window_get_current_file_browser( main_window );
-    appSettings.sortOrder = FB_SORT_BY_MTIME;
+    appSettings.sortOrder = PTK_FB_SORT_BY_MTIME;
     if ( file_browser )
         ptk_file_browser_set_sort_order( PTK_FILE_BROWSER( file_browser ), appSettings.sortOrder );
 }
@@ -1350,7 +1480,7 @@ void on_sort_by_type_activate ( GtkMenuItem *menuitem,
 {
     FMMainWindow * main_window = FM_MAIN_WINDOW( user_data );
     GtkWidget* file_browser = fm_main_window_get_current_file_browser( main_window );
-    appSettings.sortOrder = FB_SORT_BY_TYPE;
+    appSettings.sortOrder = PTK_FB_SORT_BY_TYPE;
     if ( file_browser )
         ptk_file_browser_set_sort_order( PTK_FILE_BROWSER( file_browser ), appSettings.sortOrder );
 }
@@ -1360,7 +1490,7 @@ void on_sort_by_perm_activate ( GtkMenuItem *menuitem,
 {
     FMMainWindow * main_window = FM_MAIN_WINDOW( user_data );
     GtkWidget* file_browser = fm_main_window_get_current_file_browser( main_window );
-    appSettings.sortOrder = FB_SORT_BY_PERM;
+    appSettings.sortOrder = PTK_FB_SORT_BY_PERM;
     if ( file_browser )
         ptk_file_browser_set_sort_order( PTK_FILE_BROWSER( file_browser ), appSettings.sortOrder );
 }
@@ -1370,7 +1500,7 @@ void on_sort_by_owner_activate ( GtkMenuItem *menuitem,
 {
     FMMainWindow * main_window = FM_MAIN_WINDOW( user_data );
     GtkWidget* file_browser = fm_main_window_get_current_file_browser( main_window );
-    appSettings.sortOrder = FB_SORT_BY_OWNER;
+    appSettings.sortOrder = PTK_FB_SORT_BY_OWNER;
     if ( file_browser )
         ptk_file_browser_set_sort_order( PTK_FILE_BROWSER( file_browser ), appSettings.sortOrder );
 }
@@ -1409,7 +1539,7 @@ on_view_as_icon_activate ( GtkMenuItem *menuitem,
     if ( ! check_menu->active )
         return ;
     file_browser = PTK_FILE_BROWSER( fm_main_window_get_current_file_browser( main_window ) );
-    appSettings.viewMode = FBVM_ICON_VIEW;
+    appSettings.viewMode = PTK_FB_ICON_VIEW;
     if ( file_browser && GTK_CHECK_MENU_ITEM( menuitem ) ->active )
         ptk_file_browser_view_as_icons( file_browser );
 }
@@ -1425,7 +1555,7 @@ on_view_as_list_activate ( GtkMenuItem *menuitem,
     if ( ! check_menu->active )
         return ;
     file_browser = PTK_FILE_BROWSER( fm_main_window_get_current_file_browser( main_window ) );
-    appSettings.viewMode = FBVM_LIST_VIEW;
+    appSettings.viewMode = PTK_FB_LIST_VIEW;
     if ( file_browser )
         ptk_file_browser_view_as_list( file_browser );
 }
@@ -1449,7 +1579,7 @@ void on_file_browser_open_item( PtkFileBrowser* file_browser,
         switch ( action )
         {
         case PTK_OPEN_DIR:
-            ptk_file_browser_chdir( file_browser, path, TRUE );
+            ptk_file_browser_chdir( file_browser, path, PTK_FB_CHDIR_ADD_HISTORY );
             break;
         case PTK_OPEN_NEW_TAB:
             file_browser = PTK_FILE_BROWSER( fm_main_window_get_current_file_browser( main_window ) );
@@ -1485,6 +1615,7 @@ void fm_main_window_open_terminal( GtkWindow* parent,
     if ( !appSettings.terminal )
     {
         ptk_show_error( parent,
+                        _("Error"),
                         _( "Terminal program has not been set" ) );
         fm_main_window_preference( (FMMainWindow*)parent );
     }
@@ -1504,7 +1635,7 @@ void fm_main_window_open_terminal( GtkWindow* parent,
         if ( g_shell_parse_argv( appSettings.terminal,
              &argc, &argv, NULL ) )
         {
-            vfs_exec_on_screen( gtk_widget_get_screen(parent),
+            vfs_exec_on_screen( gtk_widget_get_screen(GTK_WIDGET(parent)),
                                 path, argv, NULL, path,
                                 VFS_EXEC_DEFAULT_FLAGS, NULL );
             g_strfreev( argv );
@@ -1527,22 +1658,30 @@ void on_open_current_folder_as_root ( GtkMenuItem *menuitem,
     PtkFileBrowser* file_browser;
     const char* cwd;
     char* argv[ 4 ];
-    char* su = g_find_program_in_path( "gksu" );
+    char* su;
+#ifdef PREFERABLE_SUDO_PROG
+    su = g_find_program_in_path( PREFERABLE_SUDO_PROG );
+#else
+    /* Use default search rules */
+    su = g_find_program_in_path( "gksudo" );
+    if ( ! su )
+        su = g_find_program_in_path( "gksu" );
     if ( ! su )
         su = g_find_program_in_path( "kdesu" );
+#endif
     if ( ! su )
     {
-        ptk_show_error( GTK_WINDOW( main_window ), _( "gksu or kdesu is not found" ) );
+        ptk_show_error( GTK_WINDOW( main_window ), _("Error"), _( "gksu or kdesu is not found" ) );
         return ;
     }
     file_browser = PTK_FILE_BROWSER( fm_main_window_get_current_file_browser( main_window ) );
     cwd = ptk_file_browser_get_cwd( file_browser );
     argv[ 0 ] = su;
     argv[ 1 ] = g_get_prgname();
-    argv[ 2 ] = cwd;
+    argv[ 2 ] = (char *) cwd;
     argv[ 3 ] = NULL;
     g_spawn_async( NULL, argv, NULL,
-                   G_SPAWN_SEARCH_PATH | G_SPAWN_STDOUT_TO_DEV_NULL | G_SPAWN_STDERR_TO_DEV_NULL,
+                   G_SPAWN_STDOUT_TO_DEV_NULL | G_SPAWN_STDERR_TO_DEV_NULL,
                    NULL, NULL, NULL, NULL );
     g_free( su );
 }
@@ -1567,7 +1706,7 @@ void on_bookmark_item_activate ( GtkMenuItem* menu, gpointer user_data )
     switch ( appSettings.openBookmarkMethod )
     {
     case 1:                /* current tab */
-        ptk_file_browser_chdir( PTK_FILE_BROWSER( file_browser ), path, TRUE );
+        ptk_file_browser_chdir( PTK_FILE_BROWSER( file_browser ), path, PTK_FB_CHDIR_ADD_HISTORY );
         break;
     case 3:                /* new window */
         fm_main_window_add_new_window( main_window, path,
@@ -1585,6 +1724,12 @@ void on_bookmark_item_activate ( GtkMenuItem* menu, gpointer user_data )
 void on_bookmarks_change( PtkBookmarks* bookmarks, FMMainWindow* main_window )
 {
     GtkWidget * bookmarks_menu = create_bookmarks_menu( main_window );
+    /* FIXME: We have to popupdown the menu first, if it's showed on screen.
+      * Otherwise, it's rare but possible that we try to replace the menu while it's in use.
+      *  In that way, gtk+ will hang.  So some dirty hack is used here.
+      *  We popup down the old menu, if it's currently shown.
+      */
+    gtk_menu_popdown( (GtkMenu*)gtk_menu_item_get_submenu ( GTK_MENU_ITEM ( main_window->bookmarks ) ) );
     gtk_menu_item_set_submenu ( GTK_MENU_ITEM ( main_window->bookmarks ),
                                 bookmarks_menu );
 }
@@ -1598,7 +1743,7 @@ GtkWidget* create_bookmarks_menu_item ( FMMainWindow* main_window,
 
     menu_item = gtk_image_menu_item_new_with_label( item );
     path = ptk_bookmarks_item_get_path( item );
-    g_object_set_data( G_OBJECT( menu_item ), "path", path );
+    g_object_set_data( G_OBJECT( menu_item ), "path", (gpointer) path );
     folder_image = gtk_image_new_from_icon_name( "gnome-fs-directory",
                                                  GTK_ICON_SIZE_MENU );
     gtk_image_menu_item_set_image ( GTK_IMAGE_MENU_ITEM ( menu_item ),
@@ -1618,10 +1763,6 @@ static PtkMenuItemEntry fm_bookmarks_menu[] = {
 GtkWidget* create_bookmarks_menu ( FMMainWindow* main_window )
 {
     GtkWidget * bookmark_menu;
-    GtkWidget* add_to_bookmark;
-    GtkWidget* add_image;
-    GtkWidget* edit_bookmark;
-    GtkWidget* edit_image;
     GtkWidget* menu_item;
     GList* l;
 
@@ -1670,7 +1811,6 @@ fm_main_window_key_press_event ( GtkWidget *widget,
     return GTK_WIDGET_CLASS( parent_class ) ->key_press_event( widget, event );
 }
 
-
 void on_file_browser_before_chdir( PtkFileBrowser* file_browser,
                                    const char* path, gboolean* cancel,
                                    FMMainWindow* main_window )
@@ -1683,7 +1823,9 @@ void on_file_browser_before_chdir( PtkFileBrowser* file_browser,
     gchar* name;
     gchar* disp_path;
 
-    fm_main_window_start_busy_task( main_window );
+    /* don't add busy cursor again if the previous state of file_browser is already busy */
+    if( ! file_browser->busy )
+        fm_main_window_start_busy_task( main_window );
 
     if ( fm_main_window_get_current_file_browser( main_window ) == GTK_WIDGET( file_browser ) )
     {
@@ -1708,6 +1850,15 @@ void on_file_browser_before_chdir( PtkFileBrowser* file_browser,
     g_free( name );
 }
 
+static void on_file_browser_begin_chdir( PtkFileBrowser* file_browser,
+                                         FMMainWindow* main_window )
+{
+    gtk_widget_set_sensitive( main_window->back_btn,
+                              ptk_file_browser_can_back( file_browser ) );
+    gtk_widget_set_sensitive( main_window->forward_btn,
+                              ptk_file_browser_can_forward( file_browser ) );
+}
+
 void on_file_browser_after_chdir( PtkFileBrowser* file_browser,
                                   FMMainWindow* main_window )
 {
@@ -1721,8 +1872,10 @@ void on_file_browser_after_chdir( PtkFileBrowser* file_browser,
 
     if ( fm_main_window_get_current_file_browser( main_window ) == GTK_WIDGET( file_browser ) )
     {
+        char* disp_name = g_path_get_basename( file_browser->dir->disp_path );
         gtk_window_set_title( GTK_WINDOW( main_window ),
-                              file_browser->dir->disp_path );
+                              disp_name );
+        g_free( disp_name );
         gtk_entry_set_text( main_window->address_bar, file_browser->dir->disp_path );
         gtk_statusbar_push( GTK_STATUSBAR( main_window->status_bar ), 0, "" );
         fm_main_window_update_command_ui( main_window, file_browser );
@@ -1774,7 +1927,7 @@ void fm_main_window_update_command_ui( FMMainWindow* main_window,
 
     switch ( ptk_file_browser_get_side_pane_mode( file_browser ) )
     {
-    case FB_SIDE_PANE_BOOKMARKS:
+    case PTK_FB_SIDE_PANE_BOOKMARKS:
         g_signal_handlers_block_matched( main_window->show_location_menu,
                                          G_SIGNAL_MATCH_FUNC, 0, 0, NULL,
                                          on_show_loation_pane, NULL );
@@ -1783,7 +1936,7 @@ void fm_main_window_update_command_ui( FMMainWindow* main_window,
                                            G_SIGNAL_MATCH_FUNC, 0, 0, NULL,
                                            on_show_loation_pane, NULL );
         break;
-    case FB_SIDE_PANE_DIR_TREE:
+    case PTK_FB_SIDE_PANE_DIR_TREE:
         g_signal_handlers_block_matched( main_window->show_dir_tree_menu,
                                          G_SIGNAL_MATCH_FUNC, 0, 0, NULL,
                                          on_show_dir_tree, NULL );
@@ -1796,7 +1949,7 @@ void fm_main_window_update_command_ui( FMMainWindow* main_window,
 
     switch ( file_browser->view_mode )
     {
-    case FBVM_ICON_VIEW:
+    case PTK_FB_ICON_VIEW:
         g_signal_handlers_block_matched( main_window->view_as_icon,
                                          G_SIGNAL_MATCH_FUNC, 0, 0, NULL,
                                          on_view_as_icon_activate, NULL );
@@ -1805,7 +1958,7 @@ void fm_main_window_update_command_ui( FMMainWindow* main_window,
                                            G_SIGNAL_MATCH_FUNC, 0, 0, NULL,
                                            on_view_as_icon_activate, NULL );
         break;
-    case FBVM_LIST_VIEW:
+    case PTK_FB_LIST_VIEW:
         g_signal_handlers_block_matched( main_window->view_as_list,
                                          G_SIGNAL_MATCH_FUNC, 0, 0, NULL,
                                          on_view_as_list_activate, NULL );
@@ -1829,22 +1982,22 @@ void on_view_menu_popup( GtkMenuItem* item, FMMainWindow* main_window )
     file_browser = PTK_FILE_BROWSER( fm_main_window_get_current_file_browser( main_window ) );
     switch ( ptk_file_browser_get_sort_order( file_browser ) )
     {
-    case FB_SORT_BY_NAME:
+    case PTK_FB_SORT_BY_NAME:
         gtk_check_menu_item_set_active( main_window->sort_by_name, TRUE );
         break;
-    case FB_SORT_BY_SIZE:
+    case PTK_FB_SORT_BY_SIZE:
         gtk_check_menu_item_set_active( main_window->sort_by_size, TRUE );
         break;
-    case FB_SORT_BY_MTIME:
+    case PTK_FB_SORT_BY_MTIME:
         gtk_check_menu_item_set_active( main_window->sort_by_mtime, TRUE );
         break;
-    case FB_SORT_BY_TYPE:
+    case PTK_FB_SORT_BY_TYPE:
         gtk_check_menu_item_set_active( main_window->sort_by_type, TRUE );
         break;
-    case FB_SORT_BY_PERM:
+    case PTK_FB_SORT_BY_PERM:
         gtk_check_menu_item_set_active( main_window->sort_by_perm, TRUE );
         break;
-    case FB_SORT_BY_OWNER:
+    case PTK_FB_SORT_BY_OWNER:
         gtk_check_menu_item_set_active( main_window->sort_by_owner, TRUE );
         break;
     }
@@ -1863,6 +2016,9 @@ void fm_main_window_update_status_bar( FMMainWindow* main_window,
     char *msg;
     char size_str[ 64 ];
     char free_space[100];
+#ifdef HAVE_STATVFS
+    struct statvfs fs_stat = {0};
+#endif
 
     if ( ! file_browser )
         file_browser = PTK_FILE_BROWSER( fm_main_window_get_current_file_browser( main_window ) );
@@ -1870,12 +2026,12 @@ void fm_main_window_update_status_bar( FMMainWindow* main_window,
     free_space[0] = '\0';
 #ifdef HAVE_STATVFS
 /* FIXME: statvfs support should be moved to src/vfs */
-    struct statvfs fs_stat = {0};
+
     if( statvfs( ptk_file_browser_get_cwd(file_browser), &fs_stat ) == 0 )
     {
         char total_size_str[ 64 ];
-        file_size_to_string( size_str, fs_stat.f_bsize * fs_stat.f_bavail );
-        file_size_to_string( total_size_str, fs_stat.f_frsize * fs_stat.f_blocks );
+        vfs_file_size_to_string( size_str, fs_stat.f_bsize * fs_stat.f_bavail );
+        vfs_file_size_to_string( total_size_str, fs_stat.f_frsize * fs_stat.f_blocks );
         g_snprintf( free_space, G_N_ELEMENTS(free_space),
                     _(", Free space: %s (Total: %s )"), size_str, total_size_str );
     }
@@ -1884,7 +2040,7 @@ void fm_main_window_update_status_bar( FMMainWindow* main_window,
     n = ptk_file_browser_get_n_sel( file_browser, &total_size );
     if ( n > 0 )
     {
-        file_size_to_string( size_str, total_size );
+        vfs_file_size_to_string( size_str, total_size );
         msg = g_strdup_printf( ngettext( "%d item selected (%s)%s",
                                          "%d items selected (%s)%s", n ), n, size_str, free_space );
         gtk_statusbar_push( GTK_STATUSBAR( main_window->status_bar ), 0, msg );
@@ -1921,10 +2077,8 @@ void on_file_browser_sel_change( PtkFileBrowser* file_browser,
 void on_file_browser_pane_mode_change( PtkFileBrowser* file_browser,
                                        FMMainWindow* main_window )
 {
-    int i, n;
-    PtkFileBrowserSidePaneMode mode;
-    GtkWidget* page;
-    GtkCheckMenuItem* check;
+    PtkFBSidePaneMode mode;
+    GtkCheckMenuItem* check = NULL;
 
     if ( GTK_WIDGET( file_browser ) != fm_main_window_get_current_file_browser( main_window ) )
         return ;
@@ -1932,10 +2086,10 @@ void on_file_browser_pane_mode_change( PtkFileBrowser* file_browser,
     mode = ptk_file_browser_get_side_pane_mode( file_browser );
     switch ( mode )
     {
-    case FB_SIDE_PANE_BOOKMARKS:
+    case PTK_FB_SIDE_PANE_BOOKMARKS:
         check = GTK_CHECK_MENU_ITEM( main_window->show_location_menu );
         break;
-    case FB_SIDE_PANE_DIR_TREE:
+    case PTK_FB_SIDE_PANE_DIR_TREE:
         check = GTK_CHECK_MENU_ITEM( main_window->show_dir_tree_menu );
         break;
     }
@@ -1965,7 +2119,7 @@ void fm_main_window_start_busy_task( FMMainWindow* main_window )
     if ( 0 == main_window->n_busy_tasks )                /* Their is no busy task */
     {
         /* Create busy cursor */
-        cursor = gdk_cursor_new( GDK_WATCH );
+        cursor = gdk_cursor_new_for_display( gtk_widget_get_display( GTK_WIDGET(main_window) ), GDK_WATCH );
         if ( ! GTK_WIDGET_REALIZED( GTK_WIDGET( main_window ) ) )
             gtk_widget_realize( GTK_WIDGET( main_window ) );
         gdk_window_set_cursor ( GTK_WIDGET( main_window ) ->window, cursor );
@@ -1992,7 +2146,6 @@ void on_file_browser_splitter_pos_change( PtkFileBrowser* file_browser,
 {
     int pos;
     int i, n;
-    int current;
     GtkWidget* page;
 
     pos = gtk_paned_get_position( GTK_PANED( file_browser ) );
@@ -2021,7 +2174,7 @@ gboolean on_main_window_focus( GtkWidget* main_window,
     active = g_list_find( all_windows, main_window );
     if ( active )
     {
-        g_list_remove_link( all_windows, active );
+        all_windows = g_list_remove_link( all_windows, active );
         all_windows->prev = active;
         active->next = all_windows;
         all_windows = active;

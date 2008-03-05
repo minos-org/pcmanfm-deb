@@ -1,15 +1,28 @@
+/*
+*  C Implementation: file_properties
+*
+* Description:
+*
+*
+* Author: Hong Jen Yee (PCMan) <pcman.tw (AT) gmail.com>, (C) 2006
+*
+* Copyright: See COPYING file that comes with this distribution
+*
+*/
+
 #ifdef HAVE_CONFIG_H
 #  include <config.h>
 #endif
+
+#include "private.h"
 
 #include <gtk/gtk.h>
 #include "glib-mem.h"
 
 #include "file-properties.h"
-#include "file-properties-ui.h"
-#include "glade-support.h"
+#include "ptk-ui-xml.h"
 
-#include "xdgmime.h"
+#include "mime-type/mime-type.h"
 
 #include <sys/types.h>
 #include <pwd.h>
@@ -21,6 +34,7 @@
 
 #include "vfs-file-info.h"
 #include "vfs-app-desktop.h"
+#include "app-chooser-dialog.h"
 
 const char* chmod_names[] =
     {
@@ -29,7 +43,6 @@ const char* chmod_names[] =
         "others_r", "others_w", "others_x",
         "set_uid", "set_gid", "sticky"
     };
-
 
 typedef struct
 {
@@ -56,6 +69,11 @@ typedef struct
     guint update_label_timer;
 }
 FilePropertiesDialogData;
+
+static void
+on_dlg_response ( GtkDialog *dialog,
+                                gint response_id,
+                                gpointer user_data );
 
 /*
 * void get_total_size_of_dir( const char* path, off_t* size )
@@ -136,11 +154,11 @@ gboolean on_update_labels( FilePropertiesDialogData* data )
 
     gdk_threads_enter();
 
-    file_size_to_string( buf2, data->total_size );
+    vfs_file_size_to_string( buf2, data->total_size );
     sprintf( buf, "%s  (%llu Bytes)", buf2, ( guint64 ) data->total_size );
     gtk_label_set_text( data->total_size_label, buf );
 
-    file_size_to_string( buf2, data->size_on_disk );
+    vfs_file_size_to_string( buf2, data->size_on_disk );
     sprintf( buf, "%s  (%llu Bytes)", buf2, ( guint64 ) data->size_on_disk );
     gtk_label_set_text( data->size_on_disk_label, buf );
 
@@ -205,7 +223,7 @@ static void on_combo_change( GtkComboBox* combo, gpointer user_data )
             GtkWidget* parent;
             VFSMimeType* mime = (VFSMimeType*)user_data;
             parent = gtk_widget_get_toplevel( GTK_WIDGET( combo ) );
-            action = ptk_choose_app_for_mime_type( GTK_WINDOW(parent),
+            action = (char *) ptk_choose_app_for_mime_type( GTK_WINDOW(parent),
                                                    mime );
             if( action )
             {
@@ -235,7 +253,7 @@ static void on_combo_change( GtkComboBox* combo, gpointer user_data )
                     if( app )
                     {
                         GdkPixbuf* icon;
-                        icon = vfs_app_desktop_get_icon( app, 20 );
+                        icon = vfs_app_desktop_get_icon( app, 20, TRUE );
                         gtk_list_store_insert_with_values(
                                             GTK_LIST_STORE( model ), &it, 0,
                                             0, icon,
@@ -255,19 +273,19 @@ static void on_combo_change( GtkComboBox* combo, gpointer user_data )
             else
             {
                 int prev_sel;
-                prev_sel = GPOINTER_TO_INT( g_object_get_data( combo, "prev_sel") );
+                prev_sel = GPOINTER_TO_INT( g_object_get_data( G_OBJECT(combo), "prev_sel") );
                 gtk_combo_box_set_active( combo, prev_sel );
             }
         }
         else
         {
             int prev_sel = gtk_combo_box_get_active( combo );
-            g_object_set_data( combo, "prev_sel", GINT_TO_POINTER(prev_sel) );
+            g_object_set_data( G_OBJECT(combo), "prev_sel", GINT_TO_POINTER(prev_sel) );
         }
     }
     else
     {
-        g_object_set_data( combo, "prev_sel", GINT_TO_POINTER(-1) );
+        g_object_set_data( G_OBJECT(combo), "prev_sel", GINT_TO_POINTER(-1) );
     }
 }
 
@@ -275,7 +293,7 @@ GtkWidget* file_properties_dlg_new( GtkWindow* parent,
                                     const char* dir_path,
                                     GList* sel_files )
 {
-    GtkWidget * dlg = create_filePropertiesDlg();
+    GtkWidget * dlg = ptk_ui_xml_create_widget_from_file( PACKAGE_UI_DIR "/file_properties.glade" );
 
     FilePropertiesDialogData* data;
     gboolean need_calc_size = TRUE;
@@ -285,21 +303,19 @@ GtkWidget* file_properties_dlg_new( GtkWindow* parent,
 
     const char* multiple_files = _( "Multiple files are selected" );
     const char* calculating;
-    GtkWidget* name = lookup_widget( dlg, "file_name" );
-    GtkWidget* location = lookup_widget( dlg, "location" );
-    GtkWidget* mime_type = lookup_widget( dlg, "mime_type" );
-    GtkWidget* open_with = lookup_widget( dlg, "open_with" );
+    GtkWidget* name = ptk_ui_xml_get_widget( dlg, "file_name" );
+    GtkWidget* location = ptk_ui_xml_get_widget( dlg, "location" );
+    GtkWidget* mime_type = ptk_ui_xml_get_widget( dlg, "mime_type" );
+    GtkWidget* open_with = ptk_ui_xml_get_widget( dlg, "open_with" );
 
-    GtkWidget* mtime = lookup_widget( dlg, "mtime" );
-    GtkWidget* atime = lookup_widget( dlg, "atime" );
+    GtkWidget* mtime = ptk_ui_xml_get_widget( dlg, "mtime" );
+    GtkWidget* atime = ptk_ui_xml_get_widget( dlg, "atime" );
 
     char buf[ 64 ];
     char buf2[ 32 ];
     const char* time_format = "%Y-%m-%d %H:%M";
 
-    gchar* file_name;
     gchar* disp_path;
-    gchar* file_path;
     gchar* file_type;
 
     int i;
@@ -320,14 +336,14 @@ GtkWidget* file_properties_dlg_new( GtkWindow* parent,
     gtk_label_set_text( GTK_LABEL( location ), disp_path );
     g_free( disp_path );
 
-    data->total_size_label = GTK_LABEL( lookup_widget( dlg, "total_size" ) );
-    data->size_on_disk_label = GTK_LABEL( lookup_widget( dlg, "size_on_disk" ) );
-    data->owner = GTK_ENTRY( lookup_widget( dlg, "owner" ) );
-    data->group = GTK_ENTRY( lookup_widget( dlg, "group" ) );
+    data->total_size_label = GTK_LABEL( ptk_ui_xml_get_widget( dlg, "total_size" ) );
+    data->size_on_disk_label = GTK_LABEL( ptk_ui_xml_get_widget( dlg, "size_on_disk" ) );
+    data->owner = GTK_ENTRY( ptk_ui_xml_get_widget( dlg, "owner" ) );
+    data->group = GTK_ENTRY( ptk_ui_xml_get_widget( dlg, "group" ) );
 
     for ( i = 0; i < N_CHMOD_ACTIONS; ++i )
     {
-        data->chmod_btns[ i ] = GTK_TOGGLE_BUTTON( lookup_widget( dlg, chmod_names[ i ] ) );
+        data->chmod_btns[ i ] = GTK_TOGGLE_BUTTON( ptk_ui_xml_get_widget( dlg, chmod_names[ i ] ) );
     }
 
     for ( l = sel_files; l && l->next; l = l->next )
@@ -370,12 +386,13 @@ GtkWidget* file_properties_dlg_new( GtkWindow* parent,
      */
     if( ! same_type ||
           vfs_file_info_is_dir( file ) ||
+          vfs_file_info_is_desktop_entry( file ) ||
           vfs_file_info_is_unknown_type( file ) ||
           vfs_file_info_is_executable( file, NULL ) )
     {
         /* if open with shouldn't show, destroy it. */
         gtk_widget_destroy( open_with );
-        gtk_widget_destroy( lookup_widget( dlg, "open_with_label" ) );
+        gtk_widget_destroy( ptk_ui_xml_get_widget( dlg, "open_with_label" ) );
     }
     else /* Add available actions to the option menu */
     {
@@ -407,7 +424,7 @@ GtkWidget* file_properties_dlg_new( GtkWindow* parent,
                 GdkPixbuf* icon;
                 desktop = vfs_app_desktop_new( *action );
                 gtk_list_store_append( model, &it );
-                icon = vfs_app_desktop_get_icon(desktop, 20);
+                icon = vfs_app_desktop_get_icon(desktop, 20, TRUE);
                 gtk_list_store_set( model, &it,
                                     0, icon,
                                     1, vfs_app_desktop_get_disp_name(desktop),
@@ -419,7 +436,7 @@ GtkWidget* file_properties_dlg_new( GtkWindow* parent,
         }
         else
         {
-            g_object_set_data( open_with, "prev_sel", GINT_TO_POINTER(-1) );
+            g_object_set_data( G_OBJECT(open_with), "prev_sel", GINT_TO_POINTER(-1) );
         }
 
         /* separator */
@@ -436,7 +453,7 @@ GtkWidget* file_properties_dlg_new( GtkWindow* parent,
                 NULL, NULL );
         gtk_combo_box_set_active(GTK_COMBO_BOX(open_with), 0);
         g_signal_connect( open_with, "changed",
-                          on_combo_change, mime );
+                          G_CALLBACK(on_combo_change), mime );
 
         /* vfs_mime_type_unref( mime ); */
         /* We can unref mime when combo box gets destroyed */
@@ -456,16 +473,26 @@ GtkWidget* file_properties_dlg_new( GtkWindow* parent,
         for ( i = 0; i < N_CHMOD_ACTIONS; ++i )
         {
             gtk_toggle_button_set_inconsistent ( data->chmod_btns[ i ], TRUE );
-            data->chmod_states[ i ] = 2;
+            data->chmod_states[ i ] = 2; /* Don't touch this bit */
             g_signal_connect( G_OBJECT( data->chmod_btns[ i ] ), "toggled",
                               G_CALLBACK( on_chmod_btn_toggled ), data );
         }
     }
     else
     {
+        /* special processing for files with special display names */
+        if( vfs_file_info_is_desktop_entry( file ) )
+        {
+            char* disp_name = g_filename_display_name( file->name );
+            gtk_entry_set_text( GTK_ENTRY( name ),
+                                disp_name );
+            g_free( disp_name );
+        }
+        else
+            gtk_entry_set_text( GTK_ENTRY( name ),
+                                vfs_file_info_get_disp_name( file ) );
+
         gtk_editable_set_editable ( GTK_EDITABLE( name ), FALSE );
-        gtk_entry_set_text( GTK_ENTRY( name ),
-                            vfs_file_info_get_disp_name( file ) );
 
         if ( ! vfs_file_info_is_dir( file ) )
         {
@@ -478,7 +505,7 @@ GtkWidget* file_properties_dlg_new( GtkWindow* parent,
                      ( guint64 ) vfs_file_info_get_size( file ) );
             gtk_label_set_text( data->total_size_label, buf );
 
-            file_size_to_string( buf2,
+            vfs_file_size_to_string( buf2,
                                  vfs_file_info_get_blocks( file ) * 512 );
             sprintf( buf, "%s  (%llu Bytes)", buf2,
                      ( guint64 ) vfs_file_info_get_blocks( file ) * 512 );
@@ -491,7 +518,7 @@ GtkWidget* file_properties_dlg_new( GtkWindow* parent,
                   time_format, localtime( vfs_file_info_get_atime( file ) ) );
         gtk_label_set_text( GTK_LABEL( atime ), buf );
 
-        owner_group = vfs_file_info_get_disp_owner( file );
+        owner_group = (char *) vfs_file_info_get_disp_owner( file );
         tmp = strchr( owner_group, ':' );
         data->owner_name = g_strndup( owner_group, tmp - owner_group );
         gtk_entry_set_text( GTK_ENTRY( data->owner ), data->owner_name );
@@ -500,7 +527,7 @@ GtkWidget* file_properties_dlg_new( GtkWindow* parent,
 
         for ( i = 0; i < N_CHMOD_ACTIONS; ++i )
         {
-            if ( data->chmod_btns[ i ] != 2 )
+            if ( data->chmod_states[ i ] != 2 ) /* allow to touch this bit */
             {
                 data->chmod_states[ i ] = ( vfs_file_info_get_mode( file ) & chmod_flags[ i ] ? 1 : 0 );
                 gtk_toggle_button_set_active( data->chmod_btns[ i ], data->chmod_states[ i ] );
@@ -523,6 +550,15 @@ GtkWidget* file_properties_dlg_new( GtkWindow* parent,
                                                   ( GSourceFunc ) on_update_labels,
                                                   data );
     }
+
+    g_signal_connect( dlg, "response",
+                        G_CALLBACK(on_dlg_response), dlg );
+    g_signal_connect_swapped( ptk_ui_xml_get_widget(dlg, "ok_button"),
+                        "clicked",
+                        G_CALLBACK(gtk_widget_destroy), dlg );
+    g_signal_connect_swapped( ptk_ui_xml_get_widget(dlg, "cancel_button"),
+                        "clicked",
+                        G_CALLBACK(gtk_widget_destroy), dlg );
 
     return dlg;
 }
@@ -592,7 +628,7 @@ gid_t gid_from_name( const char* group_name )
 }
 
 void
-on_filePropertiesDlg_response ( GtkDialog *dialog,
+on_dlg_response ( GtkDialog *dialog,
                                 gint response_id,
                                 gpointer user_data )
 {
@@ -603,7 +639,6 @@ on_filePropertiesDlg_response ( GtkDialog *dialog,
     gid_t gid = -1;
     const char* owner_name;
     const char* group_name;
-    guchar* chmod_actions;
     int i;
     GList* l;
     GList* file_list;
@@ -627,10 +662,11 @@ on_filePropertiesDlg_response ( GtkDialog *dialog,
             GtkWidget* open_with;
 
             /* Set default action for mimetype */
-            if( open_with = lookup_widget( GTK_WIDGET(dialog), "open_with" ) )
+            if( ( open_with = ptk_ui_xml_get_widget( GTK_WIDGET(dialog), "open_with" ) ) )
             {
                 GtkTreeModel* model = gtk_combo_box_get_model( GTK_COMBO_BOX(open_with) );
                 GtkTreeIter it;
+
                 if( model && gtk_combo_box_get_active_iter( GTK_COMBO_BOX(open_with), &it ) )
                 {
                     char* action;
@@ -654,18 +690,18 @@ on_filePropertiesDlg_response ( GtkDialog *dialog,
                 uid = uid_from_name( owner_name );
                 if ( uid == -1 )
                 {
-                    ptk_show_error( GTK_WINDOW( dialog ), _( "Invalid User" ) );
+                    ptk_show_error( GTK_WINDOW( dialog ), _("Error"), _( "Invalid User" ) );
                     return ;
                 }
             }
             group_name = gtk_entry_get_text( data->group );
-            if ( group_name && *group_name && 
+            if ( group_name && *group_name &&
                  (!data->group_name || strcmp( group_name, data->group_name )) )
             {
                 gid = gid_from_name( group_name );
                 if ( gid == -1 )
                 {
-                    ptk_show_error( GTK_WINDOW( dialog ), _( "Invalid Group" ) );
+                    ptk_show_error( GTK_WINDOW( dialog ), _("Error"), _( "Invalid Group" ) );
                     return ;
                 }
             }

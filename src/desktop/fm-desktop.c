@@ -32,6 +32,8 @@
 #include <config.h>
 #endif
 
+#ifdef DESKTOP_INTEGRATION
+
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
@@ -142,7 +144,6 @@ scroll_cb( GtkWidget *w, GdkEventScroll *evt, gpointer user_data )
 static gboolean
 button_cb( GtkWidget *w, GdkEventButton *evt, gpointer user_data )
 {
-    GdkScreen * gscreen = gtk_widget_get_screen( w );
     gint button = evt->button;
     gint state = evt->state;
 
@@ -237,10 +238,6 @@ int fm_desktop_init()
 {
     GdkDisplay * gdpy;
     gint i;
-    Window xid;
-    GtkSettings *settings;
-    const gchar *message = NULL;
-    gboolean already_running;
 
     gdpy = gdk_display_get_default();
 
@@ -301,7 +298,7 @@ static void show_busy_cursor()
         for ( i = 0; i < n_screens; i++ )
         {
             GdkCursor* cursor;
-            cursor = gdk_cursor_new( GDK_WATCH );
+            cursor = gdk_cursor_new_for_display( gtk_widget_get_display(desktops[i]), GDK_WATCH );
             gdk_window_set_cursor ( desktops[ i ] ->window, cursor );
             gdk_cursor_unref( cursor );
         }
@@ -335,6 +332,9 @@ static void on_open_item ( PtkFileBrowser* file_browser,
         break;
     case PTK_OPEN_TERMINAL:
         fm_main_window_open_terminal( GTK_WINDOW( user_data ), path );
+        break;
+    default:
+        break;
     }
 }
 
@@ -354,6 +354,11 @@ static gboolean on_desktop_key_press( GtkWidget* desktop,
         PtkFileBrowser* browser = (PtkFileBrowser*)user_data;
         fm_main_window_open_terminal( GTK_WINDOW(desktop),
                                       ptk_file_browser_get_cwd( browser ));
+        return TRUE;
+    }
+    else if( evt->keyval == GDK_BackSpace )
+    {
+        /* Intercept the Backspace key to supress the default "Go Up" behavior of PtkFileBrowser */
         return TRUE;
     }
     return FALSE;
@@ -425,12 +430,14 @@ GtkWidget* fm_desktop_new( GdkScreen* screen )
     GtkScrolledWindow *scroll;
     GdkWindow *root;
     GtkWidget* alignment;
-    char* desktop_dir;
+    const char* desktop_dir;
     GdkRectangle area;
     int rpad, bpad;
     guint32 val;
 
     desktop = gtk_window_new( GTK_WINDOW_TOPLEVEL );
+    gtk_widget_set_app_paintable( desktop, TRUE );
+
     get_working_area( screen, &area );
     gtk_window_move( GTK_WINDOW( desktop ), 0, 0 );
     gtk_widget_set_size_request( desktop,
@@ -440,20 +447,26 @@ GtkWidget* fm_desktop_new( GdkScreen* screen )
     alignment = gtk_alignment_new( 0.5, 0.5, 1, 1 );
     gtk_container_add( GTK_CONTAINER(desktop), alignment );
 
-    browser = PTK_FILE_BROWSER(ptk_file_browser_new( alignment, FBVM_ICON_VIEW ));
-
+    browser = PTK_FILE_BROWSER(ptk_file_browser_new( alignment, PTK_FB_ICON_VIEW ));
+    gtk_widget_set_app_paintable( browser, TRUE );
+g_debug("HERE");
     g_signal_connect( browser, "open-item",
                       G_CALLBACK( on_open_item ), desktop );
+
+/*
+    g_signal_connect( browser, "before-chdir",
+                      G_CALLBACK( on_before_chdir ), desktop );
+*/
 
     ptk_file_browser_show_hidden_files( browser,
                                         appSettings.showHiddenFiles );
     ptk_file_browser_show_thumbnails( browser,
                                       appSettings.showThumbnail ? appSettings.maxThumbSize : 0 );
-    desktop_dir = g_build_filename( g_get_home_dir(), "Desktop", NULL );
+    desktop_dir = vfs_get_desktop_dir();
+
     /* FIXME: add histroy should be true because
     current working directory is stored in history list. */
-    ptk_file_browser_chdir( browser, desktop_dir, TRUE );
-    g_free( desktop_dir );
+    ptk_file_browser_chdir( browser, desktop_dir, PTK_FB_CHDIR_ADD_HISTORY );
 
     gtk_widget_set_size_request( GTK_WIDGET(browser),
                                  area.width, area.height );
@@ -482,11 +495,11 @@ GtkWidget* fm_desktop_new( GdkScreen* screen )
     gdk_window_set_events( root, gdk_window_get_events( root )
                            | GDK_PROPERTY_CHANGE_MASK );
     gdk_window_add_filter( root, on_rootwin_event, desktop );
-    g_signal_connect( desktop, "destroy", remove_filter, screen );
+    g_signal_connect( desktop, "destroy", G_CALLBACK(remove_filter), screen );
     g_signal_connect( desktop, "expose-event",
-                      on_desktop_expose, NULL );
+                      G_CALLBACK(on_desktop_expose), NULL );
     g_signal_connect( desktop, "key-press-event",
-                      on_desktop_key_press, browser );
+                      G_CALLBACK(on_desktop_key_press), browser );
 
     gtk_widget_set_double_buffered( desktop, FALSE );
     set_bg_pixmap( screen, PTK_ICON_VIEW(view), &area );
@@ -587,7 +600,6 @@ void resize_desktops()
     for ( i = 0; i < n_screens; ++i )
     {
         GtkWidget *view, *alignment, *browser;
-        GdkPixmap* pix;
         int bpad, rpad;
 
         screen = gdk_display_get_screen( display, i );
@@ -677,3 +689,14 @@ void fm_desktop_update_view()
         ptk_file_browser_update_display( browser );
     }
 }
+
+#else /* ! DESKTOP_INTEGRATION */
+
+int fm_desktop_init() { return 0; }
+void fm_desktop_cleanup() { }
+void fm_desktop_update_wallpaper() { }
+void fm_desktop_update_colors() { }
+void fm_desktop_update_thumbnails() { }
+void fm_desktop_update_view() { }
+#endif
+

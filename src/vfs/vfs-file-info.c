@@ -11,7 +11,6 @@
 */
 
 #include "vfs-file-info.h"
-#include "xdgmime.h"
 #include <glib.h>
 #include "glib-mem.h"
 #include <glib/gi18n.h>
@@ -20,9 +19,8 @@
 #include <string.h>
 
 #include "vfs-app-desktop.h"
-#include "md5.h"    /* for thumbnails */
-
-#define _MAX( x, y )     (x > y ? x : y)
+#include "vfs-thumbnail-loader.h"
+#include "vfs-utils.h"  /* for vfs_load_icon */
 
 static int big_thumb_size = 48, small_thumb_size = 20;
 static gboolean utf8_file_name = FALSE;
@@ -87,15 +85,15 @@ static void vfs_file_info_clear( VFSFileInfo* fi )
     fi->flags = VFS_FILE_INFO_NONE;
 }
 
-void vfs_file_info_ref( VFSFileInfo* fi )
+VFSFileInfo* vfs_file_info_ref( VFSFileInfo* fi )
 {
-    ++fi->n_ref;
+    g_atomic_int_inc( &fi->n_ref );
+    return fi;
 }
 
 void vfs_file_info_unref( VFSFileInfo* fi )
 {
-    --fi->n_ref;
-    if ( fi->n_ref <= 0 )
+    if ( g_atomic_int_dec_and_test( &fi->n_ref) )
     {
         vfs_file_info_clear( fi );
         g_slice_free( VFSFileInfo, fi );
@@ -179,7 +177,7 @@ const char* vfs_file_info_get_disp_size( VFSFileInfo* fi )
     if ( G_UNLIKELY( !fi->disp_size ) )
     {
         char buf[ 64 ];
-        file_size_to_string( buf, fi->size );
+        vfs_file_size_to_string( buf, fi->size );
         fi->disp_size = g_strdup( buf );
     }
     return fi->disp_size;
@@ -221,6 +219,7 @@ void vfs_file_info_reload_mime_type( VFSFileInfo* fi,
     old_mime_type = fi->mime_type;
     fi->mime_type = vfs_mime_type_get_from_file( full_path,
                                                  fi->name, &file_stat );
+    vfs_file_info_load_special_info( fi, full_path );
     vfs_mime_type_unref( old_mime_type );  /* FIXME: is vfs_mime_type_unref needed ?*/
 }
 
@@ -247,7 +246,7 @@ GdkPixbuf* vfs_file_info_get_big_icon( VFSFileInfo* fi )
         else
             w = h = 0;
 
-        if ( _MAX( w, h ) != icon_size )
+        if ( ABS( MAX( w, h ) - icon_size ) > 2 )
         {
             char * icon_name = NULL;
             if ( fi->big_thumbnail )
@@ -262,10 +261,9 @@ GdkPixbuf* vfs_file_info_get_big_icon( VFSFileInfo* fi )
                 if ( G_UNLIKELY( icon_name[ 0 ] == '/' ) )
                     fi->big_thumbnail = gdk_pixbuf_new_from_file( icon_name, NULL );
                 else
-                    fi->big_thumbnail = gtk_icon_theme_load_icon(
+                    fi->big_thumbnail = vfs_load_icon(
                                             gtk_icon_theme_get_default(),
-                                            icon_name,
-                                            icon_size, 0, NULL );
+                                            icon_name, icon_size );
             }
             if ( fi->big_thumbnail )
                 g_object_set_data_full( G_OBJECT(fi->big_thumbnail), "name", icon_name, g_free );
@@ -374,7 +372,7 @@ const char* vfs_file_info_get_disp_perm( VFSFileInfo* fi )
     return fi->disp_perm;
 }
 
-void file_size_to_string( char* buf, guint64 size )
+void vfs_file_size_to_string( char* buf, guint64 size )
 {
     char * unit;
     /* guint point; */
@@ -462,6 +460,11 @@ gboolean vfs_file_info_is_image( VFSFileInfo* fi )
     return FALSE;
 }
 
+gboolean vfs_file_info_is_desktop_entry( VFSFileInfo* fi )
+{
+    return 0 != (fi->flags & VFS_FILE_INFO_DESKTOP_ENTRY);
+}
+
 gboolean vfs_file_info_is_unknown_type( VFSFileInfo* fi )
 {
     if ( ! strcmp( XDG_MIME_TYPE_UNKNOWN,
@@ -473,13 +476,13 @@ gboolean vfs_file_info_is_unknown_type( VFSFileInfo* fi )
 /* full path of the file is required by this function */
 gboolean vfs_file_info_is_executable( VFSFileInfo* fi, const char* file_path )
 {
-    return xdg_mime_is_executable_file( file_path, fi->mime_type->type );
+    return mime_type_is_executable_file( file_path, fi->mime_type->type );
 }
 
 /* full path of the file is required by this function */
 gboolean vfs_file_info_is_text( VFSFileInfo* fi, const char* file_path )
 {
-    return xdg_mime_is_text_file( file_path, fi->mime_type->type );
+    return mime_type_is_text_file( file_path, fi->mime_type->type );
 }
 
 /*
@@ -499,7 +502,7 @@ gboolean vfs_file_info_open_file( VFSFileInfo* fi,
 
     if ( vfs_file_info_is_executable( fi, file_path ) )
     {
-        argv[ 0 ] = file_path;
+        argv[ 0 ] = (char *) file_path;
         argv[ 1 ] = '\0';
         ret = g_spawn_async( NULL, argv, NULL, G_SPAWN_STDOUT_TO_DEV_NULL|
                              G_SPAWN_SEARCH_PATH, NULL, NULL, NULL, err );
@@ -513,7 +516,7 @@ gboolean vfs_file_info_open_file( VFSFileInfo* fi,
             app = vfs_app_desktop_new( app_name );
             if ( ! vfs_app_desktop_get_exec( app ) )
                 app->exec = g_strdup( app_name );   /* FIXME: app->exec */
-            files = g_list_prepend( files, file_path );
+            files = g_list_prepend( files, (gpointer) file_path );
             /* FIXME: working dir is needed */
             ret = vfs_app_desktop_open_files( gdk_screen_get_default(),
                                               NULL, app, files, err );
@@ -531,35 +534,8 @@ mode_t vfs_file_info_get_mode( VFSFileInfo* fi )
     return fi->mode;
 }
 
-static void unload_thumnails_if_needed( VFSFileInfo* fi )
-{
-    int w, h;
-    if ( fi->big_thumbnail && fi->flags == VFS_FILE_INFO_NONE )
-    {
-        w = gdk_pixbuf_get_width( fi->big_thumbnail );
-        h = gdk_pixbuf_get_height( fi->big_thumbnail );
-        if ( _MAX( w, h ) != big_thumb_size )
-        {
-            gdk_pixbuf_unref( fi->big_thumbnail );
-            fi->big_thumbnail = NULL;
-        }
-    }
-    if ( fi->small_thumbnail && fi->flags == VFS_FILE_INFO_NONE )
-    {
-        w = gdk_pixbuf_get_width( fi->small_thumbnail );
-        h = gdk_pixbuf_get_height( fi->small_thumbnail );
-        if ( MAX( w, h ) != small_thumb_size )
-        {
-            gdk_pixbuf_unref( fi->small_thumbnail );
-            fi->small_thumbnail = NULL;
-        }
-    }
-}
-
 gboolean vfs_file_info_is_thumbnail_loaded( VFSFileInfo* fi, gboolean big )
 {
-    /* FIXME: I cannot find a better place to unload thumbnails */
-    unload_thumnails_if_needed( fi );
     if ( big )
         return ( fi->big_thumbnail != NULL );
     return ( fi->small_thumbnail != NULL );
@@ -569,22 +545,11 @@ gboolean vfs_file_info_load_thumbnail( VFSFileInfo* fi,
                                        const char* full_path,
                                        gboolean big )
 {
-    char * uri;
-    md5_byte_t md5[ 16 ];
-    char* thumbnail_file;
-    char file_name[ 36 ];
-    char mtime_str[ 32 ];
-    const char* thumb_mtime;
-    int i, w, h, size;
-    struct stat statbuf;
-    GdkPixbuf* thumbnail, *result = NULL;
-
-    /* FIXME: I cannot find a better place to unload thumbnails */
-    unload_thumnails_if_needed( fi );
+    GdkPixbuf* thumbnail;
 
     if ( big )
     {
-        if ( fi->big_thumbnail && big )
+        if ( fi->big_thumbnail )
             return TRUE;
     }
     else
@@ -592,87 +557,23 @@ gboolean vfs_file_info_load_thumbnail( VFSFileInfo* fi,
         if ( fi->small_thumbnail )
             return TRUE;
     }
-
-    if ( !gdk_pixbuf_get_file_info( full_path, &w, &h ) )
-        return FALSE;   /* image format cannot be recognized */
-
-    /* If the image itself is very small, we should load it directly */
-    if ( w <= 128 && h <= 128 )
+    thumbnail = vfs_thumbnail_load_for_file( full_path,
+                                                    big ? big_thumb_size : small_thumb_size , fi->mtime );
+    if( G_LIKELY( thumbnail ) )
     {
-        size = big ? big_thumb_size : small_thumb_size;
-        thumbnail = gdk_pixbuf_new_from_file_at_scale( full_path, size, size,
-                                                       TRUE, NULL );
         if ( big )
             fi->big_thumbnail = thumbnail;
         else
             fi->small_thumbnail = thumbnail;
-        return ( thumbnail != NULL );
     }
-
-    uri = g_filename_to_uri( full_path, NULL, NULL );
-
-    md5_state_t md5_state;
-    md5_init( &md5_state );
-    md5_append( &md5_state, ( md5_byte_t * ) uri, strlen( uri ) );
-    md5_finish( &md5_state, md5 );
-
-    for ( i = 0; i < 16; ++i )
+    else /* fallback to mime_type icon */
     {
-        sprintf( ( file_name + i * 2 ), "%02x", md5[ i ] );
-    }
-    strcpy( ( file_name + i * 2 ), ".png" );
-
-    thumbnail_file = g_build_filename( g_get_home_dir(),
-                                       ".thumbnails/normal",
-                                       file_name, NULL );
-
-    /* load existing thumbnail */
-    thumbnail = gdk_pixbuf_new_from_file( thumbnail_file, NULL );
-    if ( !thumbnail ||
-            !( thumb_mtime = gdk_pixbuf_get_option( thumbnail, "tEXt::Thumb::MTime" ) ) ||
-            atol( thumb_mtime ) != fi->mtime )
-    {
-        /* create new thumbnail */
-        thumbnail = gdk_pixbuf_new_from_file_at_size( full_path, 128, 128, NULL );
-        if ( thumbnail )
-        {
-            sprintf( mtime_str, "%lu", fi->mtime );
-            gdk_pixbuf_save( thumbnail, thumbnail_file, "png", NULL,
-                             "tEXt::Thumb::URI", uri, "tEXt::Thumb::MTime", mtime_str, NULL );
-        }
-    }
-
-    if ( thumbnail )
-    {
-        w = gdk_pixbuf_get_width( thumbnail );
-        h = gdk_pixbuf_get_height( thumbnail );
-        size = big ? big_thumb_size : small_thumb_size;
-        if ( w > h )
-        {
-            h = h * size / w;
-            w = size;
-        }
-        else if ( h > w )
-        {
-            w = w * size / h;
-            h = size;
-        }
-        else
-        {
-            w = h = size;
-        }
-        result = gdk_pixbuf_scale_simple(
-                     thumbnail,
-                     w, h, GDK_INTERP_BILINEAR );
-        gdk_pixbuf_unref( thumbnail );
         if ( big )
-            fi->big_thumbnail = result;
+            fi->big_thumbnail = vfs_file_info_get_big_icon( fi );
         else
-            fi->small_thumbnail = result;
+            fi->small_thumbnail = vfs_file_info_get_small_icon( fi );
     }
-    g_free( uri );
-    g_free( thumbnail_file );
-    return ( result != NULL );
+    return ( thumbnail != NULL );
 }
 
 void vfs_file_info_set_thumbnail_size( int big, int small )
@@ -684,10 +585,12 @@ void vfs_file_info_set_thumbnail_size( int big, int small )
 void vfs_file_info_load_special_info( VFSFileInfo* fi,
                                       const char* file_path )
 {
-    if ( g_str_has_suffix( fi->name, ".desktop" ) )
+    /*if ( G_LIKELY(fi->type) && G_UNLIKELY(fi->type->name, "application/x-desktop") ) */
+    if ( G_UNLIKELY( g_str_has_suffix( fi->name, ".desktop") ) )
     {
         VFSAppDesktop * desktop;
         const char* icon_name;
+
         fi->flags |= VFS_FILE_INFO_DESKTOP_ENTRY;
         desktop = vfs_app_desktop_new( file_path );
         if ( vfs_app_desktop_get_disp_name( desktop ) )
@@ -695,38 +598,24 @@ void vfs_file_info_load_special_info( VFSFileInfo* fi,
             vfs_file_info_set_disp_name(
                 fi, vfs_app_desktop_get_disp_name( desktop ) );
         }
-        if( fi->big_thumbnail )
-        {
-            gdk_pixbuf_unref( fi->big_thumbnail );
-            fi->big_thumbnail = NULL;
-        }
+
         if ( (icon_name = vfs_app_desktop_get_icon_name( desktop )) )
         {
-            char * _icon_name = strdup( icon_name );
             GdkPixbuf* icon;
-            int size;
-            vfs_mime_type_get_icon_size( &size, NULL );
-            /* icon name is a full path */
-            if ( icon_name[ 0 ] == '/' )
+            int big_size, small_size;
+            vfs_mime_type_get_icon_size( &big_size, &small_size );
+            if( ! fi->big_thumbnail )
             {
-                icon = gdk_pixbuf_new_from_file_at_size(
-                           icon_name, size, size, NULL );
+                icon = vfs_app_desktop_get_icon( desktop, big_size, FALSE );
+                if( G_LIKELY(icon) )
+                    fi->big_thumbnail =icon;
             }
-            else
+            if( ! fi->small_thumbnail )
             {
-                char* dot = strchr( _icon_name, '.' );
-                if ( dot )
-                    * dot = '\0';
-                icon = gtk_icon_theme_load_icon(
-                           gtk_icon_theme_get_default(),
-                           _icon_name, size, 0, NULL );
+                icon = vfs_app_desktop_get_icon( desktop, small_size, FALSE );
+                if( G_LIKELY(icon) )
+                    fi->small_thumbnail =icon;
             }
-            /* save app icon in thumbnail */
-            fi->big_thumbnail = icon;
-            if ( G_LIKELY( icon ) )
-                g_object_set_data_full( G_OBJECT(icon), "name", _icon_name, g_free );
-            else
-                g_free( _icon_name );
         }
         vfs_app_desktop_unref( desktop );
     }
@@ -742,7 +631,14 @@ void vfs_file_info_list_free( GList* list )
 char* vfs_file_resolve_path( const char* cwd, const char* relative_path )
 {
     GString* ret = g_string_sized_new( 4096 );
-    const char* sep;
+    int len;
+    gboolean strip_tail;
+
+    g_return_val_if_fail( G_LIKELY(relative_path), NULL );
+
+    len = strlen( relative_path );
+    strip_tail = (0 == len || relative_path[len-1] != '/');
+
     if( G_UNLIKELY(*relative_path != '/') ) /* relative path */
     {
         if( G_UNLIKELY(relative_path[0] == '~') ) /* home dir */
@@ -754,16 +650,17 @@ char* vfs_file_resolve_path( const char* cwd, const char* relative_path )
         {
             if( ! cwd )
             {
-                cwd = g_get_current_dir();
-                g_string_append( ret, cwd );
-                g_free( cwd );
+                char *cwd_new;
+                cwd_new = g_get_current_dir();
+                g_string_append( ret, cwd_new );
+                g_free( cwd_new );
             }
             else
                 g_string_append( ret, cwd );
         }
     }
 
-    if( relative_path[0] != '/' )
+    if( relative_path[0] != '/'  && (0 == ret->len || ret->str[ ret->len - 1 ] != '/' ) )
         g_string_append_c( ret, '/' );
 
     while( G_LIKELY( *relative_path ) )
@@ -793,8 +690,8 @@ char* vfs_file_resolve_path( const char* cwd, const char* relative_path )
         }while( G_LIKELY( *(relative_path++) != '/' && *relative_path ) );
     }
 
-    /* remove tailing '/' */
-    if( G_LIKELY( ret->len > 1 ) && G_UNLIKELY( ret->str[ ret->len - 1 ] == '/' ) )
+    /* if original path contains tailing '/', preserve it; otherwise, remove it. */
+    if( strip_tail && G_LIKELY( ret->len > 1 ) && G_UNLIKELY( ret->str[ ret->len - 1 ] == '/' ) )
         g_string_truncate( ret, ret->len - 1 );
     return g_string_free( ret, FALSE );
 }

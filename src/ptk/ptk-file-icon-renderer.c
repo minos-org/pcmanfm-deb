@@ -37,7 +37,6 @@ ptk_file_icon_renderer_set_property ( GObject *object,
 static void
 ptk_file_icon_renderer_finalize ( GObject *gobject );
 
-
 static void
 ptk_file_icon_renderer_get_size ( GtkCellRenderer *cell,
                                   GtkWidget *widget,
@@ -46,7 +45,6 @@ ptk_file_icon_renderer_get_size ( GtkCellRenderer *cell,
                                   gint *y_offset,
                                   gint *width,
                                   gint *height );
-
 
 static void
 ptk_file_icon_renderer_render ( GtkCellRenderer *cell,
@@ -225,7 +223,7 @@ ptk_file_icon_renderer_class_init ( PtkFileIconRendererClass *klass )
 static void
 ptk_file_icon_renderer_finalize ( GObject *object )
 {
-    PtkFileIconRenderer* renderer = PTK_FILE_ICON_RENDERER(object); 
+    PtkFileIconRenderer* renderer = PTK_FILE_ICON_RENDERER(object);
     if( renderer->info )
         vfs_file_info_unref( renderer->info );
 
@@ -254,9 +252,7 @@ ptk_file_icon_renderer_get_property ( GObject *object,
               break;
         */
     case PROP_INFO:
-        if( renderer->info )
-            vfs_file_info_ref( renderer->info );
-        g_value_set_pointer( value, renderer->info );
+        g_value_set_pointer( value, renderer->info ? vfs_file_info_ref(renderer->info) : NULL );
 
     case PROP_FOLLOW_STATE:
         g_value_set_boolean ( value, renderer->follow_state );
@@ -540,11 +536,14 @@ void ptk_file_icon_renderer_get_size ( GtkCellRenderer *cell,
     GTK_CELL_RENDERER_CLASS( parent_class )->get_size( cell, widget, cell_area,
                                                        x_offset, y_offset,
                                                        width, height );
+if(!width || ! height)
+return;
 
+
+//g_debug( "w=%d, h=%d", *width, *height );
     if ( *width > *height )
         * height = *width;
     else if ( *width < *height )
         * width = *height;
 }
-
 

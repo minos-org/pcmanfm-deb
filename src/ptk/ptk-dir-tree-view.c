@@ -61,11 +61,13 @@ struct _DirTreeNode
     int n_expand;
 };
 
+#if 0
 /*  Drag & Drop/Clipboard targets  */
 static GtkTargetEntry drag_targets[] =
     {
         { "text/uri-list", 0 , 0 }
     };
+#endif
 
 static gboolean filter_func( GtkTreeModel *model,
                              GtkTreeIter *iter,
@@ -112,7 +114,9 @@ GtkWidget* ptk_dir_tree_view_new( PtkFileBrowser* browser,
 
     dir_tree_view = GTK_TREE_VIEW( gtk_tree_view_new () );
     gtk_tree_view_set_headers_visible( dir_tree_view, FALSE );
-
+#if GTK_CHECK_VERSION(2, 10, 0)
+    gtk_tree_view_set_enable_tree_lines(dir_tree_view, TRUE);
+#endif
     /*
     FIXME: Temporarily disable drag & drop since it doesn't work right now.
     gtk_tree_view_enable_model_drag_dest ( dir_tree_view,
@@ -170,7 +174,7 @@ GtkWidget* ptk_dir_tree_view_new( PtkFileBrowser* browser,
     gtk_tree_view_expand_row( dir_tree_view, tree_path, FALSE );
     gtk_tree_path_free( tree_path );
 
-    g_signal_connect( dir_tree_view, "destroy", on_destroy, NULL );
+    g_signal_connect( dir_tree_view, "destroy", G_CALLBACK(on_destroy), NULL );
     return GTK_WIDGET( dir_tree_view );
 }
 
@@ -255,12 +259,11 @@ _found:
     return TRUE;
 }
 
-static char*
-ptk_dir_view_get_dir_path( GtkTreeModel* model, GtkTreeIter* it )
+/* FIXME: should this API be put here? Maybe it belongs to prk-dir-tree.c */
+char* ptk_dir_view_get_dir_path( GtkTreeModel* model, GtkTreeIter* it )
 {
     GtkTreeModel * tree;
     GtkTreeIter real_it;
-    char* dir_path = NULL;
 
     gtk_tree_model_filter_convert_iter_to_child_iter(
         GTK_TREE_MODEL_FILTER( model ), &real_it, it );
@@ -273,7 +276,6 @@ char* ptk_dir_tree_view_get_selected_dir( GtkTreeView* dir_tree_view )
 {
     GtkTreeModel * model;
     GtkTreeIter it;
-    GtkTreePath* tree_path;
     GtkTreeSelection* tree_sel;
 
     tree_sel = gtk_tree_view_get_selection( dir_tree_view );
@@ -290,7 +292,7 @@ GtkTreeModel* get_dir_tree_model()
     {
         dir_tree_model = ptk_dir_tree_new( TRUE );
         g_object_add_weak_pointer( G_OBJECT( dir_tree_model ),
-                                   ( gpointer * ) & dir_tree_model );
+                                   ( gpointer * ) (GtkWidget *) & dir_tree_model );
     }
     else
     {
@@ -389,8 +391,7 @@ gboolean on_dir_tree_view_button_press( GtkWidget* view,
                     char* dir_name;
                     file_path = ptk_dir_view_get_dir_path( model, &it );
 
-                    vfs_file_info_ref( file );
-                    sel_files = g_list_prepend( NULL, file );
+                    sel_files = g_list_prepend( NULL, vfs_file_info_ref(file) );
                     dir_name = g_path_get_dirname( file_path );
                     popup = ptk_file_menu_new(
                                 file_path, file,

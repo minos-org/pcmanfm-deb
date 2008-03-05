@@ -1,7 +1,7 @@
 /*
 *  C Implementation: ptk-file-task
 *
-* Description: 
+* Description:
 *
 *
 * Author: Hong Jen Yee (PCMan) <pcman.tw (AT) gmail.com>, (C) 2006
@@ -95,10 +95,6 @@ void on_progress_dlg_response( GtkDialog* dlg, int response, PtkFileTask* task )
 
 gboolean open_up_progress_dlg( PtkFileTask* task )
 {
-    GtkLabel * action;
-    GtkLabel* from;
-    GtkLabel* to;
-    GtkLabel* cur;
     GtkTable* table;
     GtkLabel* label;
 
@@ -330,6 +326,7 @@ gboolean on_vfs_file_task_state_cb( VFSFileTask* task,
             data->timeout = 0;
         }
         ptk_show_error( data->progress_dlg ? GTK_WINDOW(data->progress_dlg) : data->parent_window,
+                        _("Error"),
                         state_data ? (char*)state_data : g_strerror( task->error ) );
         ret = FALSE;   /* abort */
         break;

@@ -10,9 +10,19 @@
 *
 */
 
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+#include <unistd.h> /* for access */
+
 #include "ptk-file-menu.h"
 #include <glib.h>
 #include "glib-mem.h"
+#include <string.h>
 
 #include <glib/gi18n.h>
 #include <gdk/gdkkeysyms.h>
@@ -20,6 +30,9 @@
 #include "vfs-app-desktop.h"
 #include "ptk-utils.h"
 #include "ptk-file-misc.h"
+#include "ptk-file-archiver.h"
+#include "ptk-clipboard.h"
+#include "app-chooser-dialog.h"
 
 typedef struct _PtkFileMenu PtkFileMenu;
 struct _PtkFileMenu
@@ -39,9 +52,11 @@ on_popup_open_activate ( GtkMenuItem *menuitem,
 static void
 on_popup_open_with_another_activate ( GtkMenuItem *menuitem,
                                       PtkFileMenu* data );
+#if 0
 static void
 on_file_properties_activate ( GtkMenuItem *menuitem,
                               PtkFileMenu* data );
+#endif
 static void
 on_popup_run_app ( GtkMenuItem *menuitem,
                    PtkFileMenu* data );
@@ -128,6 +143,7 @@ static PtkMenuItemEntry dir_popup_menu_items[] =
         PTK_MENU_END
     };
 
+#if 0
 static gboolean same_file_type( GList* files )
 {
     GList * l;
@@ -149,8 +165,9 @@ static gboolean same_file_type( GList* files )
     vfs_mime_type_unref( mime_type );
     return TRUE;
 }
+#endif
 
-static void ptk_file_menu_free( PtkFileMenu* data )
+static void ptk_file_menu_free( PtkFileMenu *data )
 {
     g_free( data->file_path );
     vfs_file_info_unref( data->info );
@@ -170,14 +187,13 @@ GtkWidget* ptk_file_menu_new( const char* file_path,
 
     GtkWidget *open;
     char* open_title;
-    GtkWidget *open_with, *open_with_menu, *open_with_another;
-    GtkWidget *seperator;
+    GtkWidget *open_with, *cut, *copy, *del, *rename, *open_with_menu, *open_with_another;
+    GtkWidget *seperator, *top_separator = NULL;
     GtkWidget *create_new;
     GtkWidget *extract;
     GtkWidget *paste;
-    GtkAccelGroup *accel_group;
     GtkWidget *app_menu_item;
-    gboolean is_dir;
+    gboolean is_dir, menu_for_cwd = FALSE;
 
     char **apps, **app;
     const char* app_name = NULL;
@@ -189,19 +205,25 @@ GtkWidget* ptk_file_menu_new( const char* file_path,
     GtkWidget* app_img;
 
     PtkFileMenu* data;
+    int no_write_access = 1, no_read_access = 1;
 
     data = g_slice_new0( PtkFileMenu );
-    data->cwd = g_strdup( cwd );
+
+    menu_for_cwd =  (0 == strcmp( file_path, cwd )); /* menu for cwd */
+    if( menu_for_cwd )
+        data->cwd = g_path_get_dirname(cwd);
+    else
+        data->cwd = g_strdup( cwd );
+
     data->browser = browser;
     data->file_path = g_strdup( file_path );
-    data->info = info;
-    vfs_file_info_ref( info );
+    data->info = vfs_file_info_ref( info );
     data->sel_files = sel_files;
 
     data->accel_group = gtk_accel_group_new ();
 
     popup = gtk_menu_new ();
-    g_object_weak_ref( G_OBJECT( popup ), ptk_file_menu_free, data );
+    g_object_weak_ref( G_OBJECT( popup ), (GWeakNotify) ptk_file_menu_free, data );
     g_signal_connect_after( ( gpointer ) popup, "selection-done",
                             G_CALLBACK ( gtk_widget_destroy ), NULL );
 
@@ -210,6 +232,7 @@ GtkWidget* ptk_file_menu_new( const char* file_path,
 
     if ( g_file_test( file_path, G_FILE_TEST_IS_DIR ) )
     {
+        dir_popup_menu_items[0].ret = &top_separator;
         ptk_menu_add_items_from_data( popup, dir_popup_menu_items,
                                       data, data->accel_group );
         is_dir = TRUE;
@@ -220,16 +243,52 @@ GtkWidget* ptk_file_menu_new( const char* file_path,
     }
 
     basic_popup_menu[ 0 ].ret = &open_with;
+    basic_popup_menu[ 2 ].ret = &cut;
+    basic_popup_menu[ 3 ].ret = &copy;
     basic_popup_menu[ 4 ].ret = &paste;
+    basic_popup_menu[ 5 ].ret = &del;
+    basic_popup_menu[ 6 ].ret = &rename;
     basic_popup_menu[ 9 ].ret = &extract;
     basic_popup_menu[ 10 ].ret = &create_new;
     ptk_menu_add_items_from_data( popup, basic_popup_menu, data, data->accel_group );
     gtk_widget_show_all( GTK_WIDGET( popup ) );
 
+#if defined(HAVE_EUIDACCESS)
+    no_read_access = euidaccess( file_path, R_OK );
+    no_write_access = euidaccess( file_path, W_OK );
+#elif defined(HAVE_EACCESS)
+    no_read_access = eaccess( file_path, R_OK );
+    no_write_access = eaccess( file_path, W_OK );
+#endif
+
+    if( no_write_access )
+    {
+        /* have no write access to current file */
+        gtk_widget_set_sensitive( cut, FALSE );
+        gtk_widget_set_sensitive( paste, FALSE );
+        gtk_widget_set_sensitive( del, FALSE );
+        gtk_widget_set_sensitive( rename, FALSE );
+        gtk_widget_set_sensitive( create_new, FALSE );
+    }
+
+    if( no_read_access )
+    {
+        /* FIXME:  Open should be disabled, too */
+        gtk_widget_set_sensitive( copy, FALSE );
+    }
+
     if ( ! is_dir )
     {
         gtk_widget_destroy( paste );
         gtk_widget_destroy( create_new );
+    }
+    else if( menu_for_cwd ) /* menu for cwd */
+    {
+        /* delete some confusing menu item if this menu is for current folder */
+        gtk_widget_destroy( cut );
+        gtk_widget_destroy( copy );
+        gtk_widget_destroy( del );
+        gtk_widget_destroy( rename );
     }
 
     /*  Add all of the apps  */
@@ -248,8 +307,10 @@ GtkWidget* ptk_file_menu_new( const char* file_path,
         {
             len1 = apps ? g_strv_length( apps ) : 0;
             len2 = g_strv_length( txt_apps );
+            tmp = apps;
             apps = vfs_mime_type_join_actions( apps, len1, txt_apps, len2 );
             g_strfreev( txt_apps );
+            g_strfreev( tmp );
         }
         vfs_mime_type_unref( txt_type );
     }
@@ -284,7 +345,7 @@ GtkWidget* ptk_file_menu_new( const char* file_path,
                                                &icon_w, &icon_h );
 
             app_icon = vfs_app_desktop_get_icon( desktop_file,
-                                                 icon_w > icon_h ? icon_w : icon_h );
+                                                 icon_w > icon_h ? icon_w : icon_h, TRUE );
             if ( app_icon )
             {
                 app_img = gtk_image_new_from_pixbuf( app_icon );
@@ -345,13 +406,22 @@ GtkWidget* ptk_file_menu_new( const char* file_path,
     }
     else
     {
-        open = gtk_image_menu_item_new_with_mnemonic( _( "_Open" ) );
-        app_img = gtk_image_new_from_icon_name( "gnome-fs-directory", GTK_ICON_SIZE_MENU );
-        gtk_image_menu_item_set_image( GTK_IMAGE_MENU_ITEM( open ), app_img );
+        if( menu_for_cwd ) /* not menu for cwd */
+        {
+            /* delete some confusing menu item if this menu is for current folder */
+            open = gtk_image_menu_item_new_with_mnemonic( _( "_Open" ) );
+            app_img = gtk_image_new_from_icon_name( "gnome-fs-directory", GTK_ICON_SIZE_MENU );
+            gtk_image_menu_item_set_image( GTK_IMAGE_MENU_ITEM( open ), app_img );
+        }
     }
-    gtk_widget_show( open );
-    g_signal_connect( open, "activate", G_CALLBACK( on_popup_open_activate ), data );
-    gtk_menu_shell_insert( GTK_MENU_SHELL( popup ), open, 0 );
+    if( open )
+    {
+        gtk_widget_show( open );
+        g_signal_connect( open, "activate", G_CALLBACK( on_popup_open_activate ), data );
+        gtk_menu_shell_insert( GTK_MENU_SHELL( popup ), open, 0 );
+    }
+    else if( top_separator )
+        gtk_widget_destroy( top_separator );
 
     if ( open_icon )
         gdk_pixbuf_unref( open_icon );
@@ -385,11 +455,7 @@ on_popup_open_with_another_activate ( GtkMenuItem *menuitem,
                                       PtkFileMenu* data )
 {
     char * app = NULL;
-    GtkTreeModel* model;
-    GtkTreeIter it;
-    GList* sel_files;
     PtkFileBrowser* browser = data->browser;
-    VFSFileInfo* file;
     VFSMimeType* mime_type;
 
     if ( data->info )
@@ -405,7 +471,7 @@ on_popup_open_with_another_activate ( GtkMenuItem *menuitem,
         mime_type = vfs_mime_type_get_from_type( XDG_MIME_TYPE_DIRECTORY );
     }
 
-    app = ptk_choose_app_for_mime_type( GTK_WINDOW( gtk_widget_get_toplevel( GTK_WIDGET( browser ) ) ),
+    app = (char *) ptk_choose_app_for_mime_type( GTK_WINDOW( gtk_widget_get_toplevel( GTK_WIDGET( browser ) ) ),
                                         mime_type );
     if ( app )
     {
@@ -436,7 +502,7 @@ void on_popup_run_app( GtkMenuItem *menuitem, PtkFileMenu* data )
     if( ! sel_files )
         sel_files = g_list_prepend( sel_files, data->info );
     ptk_open_files_with_app( data->cwd, sel_files,
-                             app, data->browser );
+                             (char *) app, data->browser );
     if( sel_files != data->sel_files )
         g_list_free( sel_files );
 }
@@ -604,13 +670,16 @@ create_new_file( PtkFileMenu* data, gboolean create_dir )
         char* cwd;
         GtkWidget* parent;
         parent = gtk_widget_get_toplevel( GTK_WIDGET(data->browser) );
-        if( data->file_path && 
+        if( data->file_path &&
             g_file_test( data->file_path, G_FILE_TEST_IS_DIR ) )
             cwd = data->file_path;
         else
             cwd = data->cwd;
-        ptk_create_new_file( GTK_WINDOW( parent ),
-                             cwd, create_dir );
+        if( G_LIKELY(data->browser) )
+            ptk_file_browser_create_new_file( data->browser, create_dir );
+        else /* Is this possible? */
+            ptk_create_new_file( GTK_WINDOW( parent ),
+                                 cwd, create_dir, NULL );
     }
 }
 
