@@ -38,6 +38,7 @@ void fm_desktop_update_thumbnails();
 void fm_desktop_update_wallpaper();
 void fm_desktop_update_colors();
 void fm_desktop_update_icons();
+void fm_desktop_set_single_click( gboolean single_click );
 
 G_END_DECLS
 

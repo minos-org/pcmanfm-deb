@@ -1,3 +1,36 @@
+pcmanfm (0.5-1) unstable; urgency=low
+
+  * New upstream release
+    - Single click to open items (optional, finally we have it!).
+    - UI adjustment: The preference dialog is now GNOME HIG compliant.
+    - The preference dialog will use a non-GNOME HIG compliant, more 
+      compact layout under small screens.
+    - Support calling preference dialog via command line with 
+      --show-pref.
+    - Support changing wallpaper desktop window via command line with 
+      --set-wallpaper.
+    - Open preference dialog no longer blocks the desktop window and 
+      other folder windows.
+    - Improve the usability of detailed list view (better selection
+      handling).
+    - Add a basic but user-friendly "Find Files" utility.This can 
+      completely replace the simple find tool provided by GNOME.
+      (Can be launched from command line, too). 
+    - Fix folder handler problems previously interfering nautilus 
+      under GNOME.
+    - Rename the menu item showed in the system menu from 
+      "PCMan File Manager" to "File Manager" for better usability.
+
+ -- Andrew Lee <andrew@linux.org.tw>  Thu, 17 Jul 2008 13:31:07 +0800
+
+pcmanfm (0.4.5-1) unstable; urgency=low
+
+  * New upstream release
+    - Support new shared-mime-info 0.40
+    - Adjust UI of preference dialog
+
+ -- Andrew Lee <andrew@linux.org.tw>  Tue, 01 Jul 2008 00:37:56 +0800
+
 pcmanfm (0.4.3-1) unstable; urgency=low
 
   * New upstream release (Closes: #481957)

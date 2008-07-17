@@ -28,12 +28,17 @@
 #include "vfs-dir.h"
 #include "vfs-utils.h" /* for vfs_load_icon */
 
+#include "glib-utils.h" /* for g_mkdir_with_parents */
+
 static GtkTreeModel* model = NULL;
 static int n_vols = 0;
 static int first_vol_idx = 0;
 static int sep_idx = 0;
 static guint icon_size = 20;    /* FIXME: icon size should not be hard coded */
 static guint theme_changed = 0; /* GtkIconTheme::"changed" handler */
+
+static gboolean has_desktop_dir = TRUE;
+static gboolean show_trash_can = FALSE;
 
 static void ptk_location_view_init_model( GtkListStore* list );
 
@@ -68,8 +73,6 @@ enum {
     COL_DATA,
     N_COLS
 };
-
-static gboolean has_desktop_dir = TRUE;
 
 /*  Drag & Drop/Clipboard targets  */
 static GtkTargetEntry drag_targets[] = { {"text/uri-list", 0 , 0 } };
@@ -127,12 +130,14 @@ static void update_icons()
     GtkListStore* list = GTK_LIST_STORE( model );
     icon_theme = gtk_icon_theme_get_default();
 
+    /* home dir */
     gtk_tree_model_get_iter_first( model, &it );
     icon = vfs_load_icon ( icon_theme, "gnome-fs-home", icon_size );
     gtk_list_store_set( list, &it, COL_ICON, icon, -1 );
     if ( icon )
         gdk_pixbuf_unref( icon );
 
+    /* desktop dir */
     if( has_desktop_dir )
     {
         gtk_tree_model_iter_next( model, &it );
@@ -142,6 +147,17 @@ static void update_icons()
             gdk_pixbuf_unref( icon );
     }
 
+    if( show_trash_can )
+    {
+        /* trash can */
+        gtk_tree_model_iter_next( model, &it );
+        icon = vfs_load_icon ( icon_theme, "gnome-fs-trash-empty", icon_size );
+        gtk_list_store_set( list, &it, COL_ICON, icon, -1 );
+        if ( icon )
+            gdk_pixbuf_unref( icon );
+    }
+
+    /* volumes */
     for( i = 0; i < n_vols; ++i )
     {
         if( G_UNLIKELY( ! gtk_tree_model_iter_next( model, &it ) ) )
@@ -168,6 +184,43 @@ static void update_icons()
     }
     if ( icon )
         gdk_pixbuf_unref( icon );
+}
+
+void ptk_location_view_show_trash_can( gboolean show )
+{
+    GtkTreeIter it;
+
+    if( show == show_trash_can )
+        return;
+    show_trash_can = show;
+
+    if( show )
+    {
+        char* real_path = g_build_filename( vfs_get_trash_dir(), "files", NULL );
+
+        if( ! g_file_test( real_path, G_FILE_TEST_EXISTS ) )
+            g_mkdir_with_parents( real_path, 0700 );
+
+        gtk_list_store_insert_with_values( (GtkListStore*)model,
+                                         &it, sep_idx,
+                                         COL_NAME,
+                                         _("Trash"),
+                                         COL_PATH,
+                                         real_path, -1);
+        g_free( real_path );
+
+        ++sep_idx;
+        ++first_vol_idx;
+    }
+    else
+    {
+        if( gtk_tree_model_iter_nth_child( model, &it, NULL, sep_idx - 1 ) )
+        {
+            gtk_list_store_remove( model, &it );
+            --sep_idx;
+            --first_vol_idx;
+        }
+    }
 }
 
 void ptk_location_view_init_model( GtkListStore* list )
@@ -201,21 +254,11 @@ void ptk_location_view_init_model( GtkListStore* list )
     else
         has_desktop_dir = FALSE;
 
-    /*  FIXME: I personally hate trash can, but some users love it.
-      icon = vfs_load_icon (icon_theme, "gnome-fs-trash-empty", icon_size )
-      real_path = g_build_filename( g_get_home_dir(), ".Trash", NULL );
-      gtk_list_store_insert_with_values( list, &it, ++pos,
-                                         COL_ICON,
-                                         icon,
-                                         COL_NAME,
-                                         _("Trash"),
-                                         COL_PATH,
-                                         real_path, -1);
-      g_free( real_path );
-      gdk_pixbuf_unref(icon);
-    */
-
     sep_idx = first_vol_idx = pos + 1;
+
+    /*  I personally hate trash can, but some users love it. */
+    // ptk_location_view_show_trash_can( show_trash_can );
+    // ++pos;
 
     n_vols = 0;
     l = vfs_volume_get_all_volumes();

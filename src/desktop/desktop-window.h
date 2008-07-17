@@ -97,6 +97,7 @@ struct _DesktopWindow
     gboolean dir_first : 1;
     gboolean file_first : 1;
     gboolean show_thumbnails : 1;
+    gboolean single_click : 1;
 
     /* <private> */
 
@@ -106,6 +107,11 @@ struct _DesktopWindow
     gboolean drag_entered : 1;
     gboolean pending_drop_action : 1;
     dev_t drag_src_dev;
+
+    /* single click */
+    guint single_click_timeout_handler;
+    GdkCursor* hand_cursor;
+    DesktopItem* hover_item;
 
     gint drag_start_x;  /* for drag & drop */
     gint drag_start_y;
@@ -153,6 +159,8 @@ void desktop_window_set_text_color( DesktopWindow* win, GdkColor* clr, GdkColor*
 
 void desktop_window_set_icon_size( DesktopWindow* win, int size );
 void desktop_window_set_show_thumbnails( DesktopWindow* win, gboolean show );
+
+void desktop_window_set_single_click( DesktopWindow* win, gboolean single_click );
 
 void desktop_window_reload_icons( DesktopWindow* win );
 

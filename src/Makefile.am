@@ -9,14 +9,10 @@ INCLUDES = \
     -I$(top_srcdir)/src/libmd5-rfc \
     -I$(top_srcdir)/src/desktop \
     -I$(top_srcdir)/src/inotify \
-    -I$(top_srcdir)/src/exo-icon-view \
+    -I$(top_srcdir)/src/exo \
     -DPACKAGE_DATA_DIR=\""$(datadir)/pcmanfm"\" \
     -DPACKAGE_UI_DIR=\""$(datadir)/pcmanfm/ui"\" \
-    -DPACKAGE_LOCALE_DIR=\""$(prefix)/$(DATADIRNAME)/locale"\" \
-    @GTK_CFLAGS@ \
-    @SN_CFLAGS@ \
-    @HAL_CFLAGS@ \
-    @G_CAST_CHECKS@
+    -DPACKAGE_LOCALE_DIR=\""$(prefix)/$(DATADIRNAME)/locale"\"
 
 bin_PROGRAMS = pcmanfm
 
@@ -96,11 +92,12 @@ INOTIFY_SOURCES = \
     inotify/inotify-syscalls.h \
     inotify/linux-inotify.h
 
-EXO_ICON_VIEW_SOURCES = \
-    exo-icon-view/exo-icon-view.c exo-icon-view/exo-icon-view.h \
-    exo-icon-view/exo-private.c exo-icon-view/exo-private.h \
-    exo-icon-view/exo-string.c exo-icon-view/exo-string.h \
-    exo-icon-view/exo-marshal.c exo-icon-view/exo-marshal.h
+EXO_SOURCES = \
+    exo/exo-icon-view.c exo/exo-icon-view.h \
+    exo/exo-tree-view.c exo/exo-tree-view.h \
+    exo/exo-private.c exo/exo-private.h \
+    exo/exo-string.c exo/exo-string.h \
+    exo/exo-marshal.c exo/exo-marshal.h
 
 COMPAT_SOURCES = \
     compat/glib-mem.h \
@@ -115,14 +112,22 @@ pcmanfm_SOURCES = \
     $(COMPAT_SOURCES) \
     $(PTK_SOURCES) \
     $(PTK_UI_XML_SOURCES) \
-    $(EXO_ICON_VIEW_SOURCES) \
+    $(EXO_SOURCES) \
     $(DESKTOP_SOURCES) \
     private.h \
-    main.c \
+    main.c pcmanfm.h \
     main-window.c main-window.h \
     settings.c settings.h \
     pref-dialog.c pref-dialog.h \
-    edit-bookmarks.c edit-bookmarks.h
+    edit-bookmarks.c edit-bookmarks.h \
+    find-files.c find-files.h
+
+pcmanfm_CFLAGS = \
+    @GTK_CFLAGS@ \
+    @SN_CFLAGS@ \
+    @HAL_CFLAGS@ \
+    @G_CAST_CHECKS@ \
+    -Werror-implicit-function-declaration
 
 pcmanfm_LDADD = @GTK_LIBS@ $(INTLLIBS) @FAM_LIBS@ @HAL_LIBS@ @SN_LIBS@
 

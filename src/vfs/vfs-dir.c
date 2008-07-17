@@ -14,6 +14,7 @@
 #include "vfs-thumbnail-loader.h"
 #include "glib-mem.h"
 
+#include <glib/gi18n.h>
 #include <string.h>
 
 #include <fcntl.h>  /* for open() */
@@ -78,6 +79,9 @@ static guint change_notify_timeout = 0;
 static guint theme_change_notify = 0;
 
 static char* desktop_dir = NULL;
+static char* home_trash_dir = NULL;
+static size_t home_trash_dir_len = 0;
+
 static gboolean is_desktop_set = FALSE;
 
 GType vfs_dir_get_type()
@@ -179,6 +183,9 @@ void vfs_dir_class_init( VFSDirClass* klass )
     /* FIXME: Is there better way to do this? */
     if( G_UNLIKELY( ! is_desktop_set ) )
         vfs_get_desktop_dir();
+
+    if( ! home_trash_dir )
+        vfs_get_trash_dir();
 }
 
 /* constructor */
@@ -476,7 +483,6 @@ VFSDir* vfs_dir_new( const char* path )
     VFSDir * dir;
     dir = ( VFSDir* ) g_object_new( VFS_TYPE_DIR, NULL );
     dir->path = g_strdup( path );
-    dir->disp_path = g_filename_display_name( path );
     return dir;
 }
 
@@ -489,10 +495,65 @@ void on_list_task_finished( VFSAsyncTask* task, gboolean is_cancelled, VFSDir* d
     dir->load_complete = 1;
 }
 
+static gboolean is_dir_trash( const char* path )
+{
+/* FIXME: Temporarily disable trash support since it's not finished */
+#if 0
+    /* FIXME: Only support home trash now */
+    if( strncmp( path, home_trash_dir, home_trash_dir_len ) == 0 )
+    {
+        if( strcmp( path + home_trash_dir_len, "/files" ) == 0 )
+        {
+            return TRUE;
+        }
+    }
+#endif
+
+    return FALSE;
+}
+
+static gboolean is_dir_mount_point( const char* path )
+{
+    return FALSE;   /* FIXME: not implemented */
+}
+
+static gboolean is_dir_remote( const char* path )
+{
+    return FALSE;   /* FIXME: not implemented */
+}
+
+static gboolean is_dir_virtual( const char* path )
+{
+    return FALSE;   /* FIXME: not implemented */
+}
+
+
 void vfs_dir_load( VFSDir* dir )
 {
     if ( G_LIKELY(dir->path) )
     {
+        dir->disp_path = g_filename_display_name( dir->path );
+        dir->flags = 0;
+
+        /* FIXME: We should check access here! */
+
+        if( G_UNLIKELY( strcmp( dir->path, vfs_get_desktop_dir() ) == 0 ) )
+            dir->is_desktop = TRUE;
+        else if( G_UNLIKELY( strcmp( dir->path, g_get_home_dir() ) == 0 ) )
+            dir->is_home = TRUE;
+        if( G_UNLIKELY(is_dir_trash(dir->path)) )
+        {
+//            g_free( dir->disp_path );
+//            dir->disp_path = g_strdup( _("Trash") );
+            dir->is_trash = TRUE;
+        }
+        if( G_UNLIKELY( is_dir_mount_point(dir->path)) )
+            dir->is_mount_point = TRUE;
+        if( G_UNLIKELY( is_dir_remote(dir->path)) )
+            dir->is_remote = TRUE;
+        if( G_UNLIKELY( is_dir_virtual(dir->path)) )
+            dir->is_virtual = TRUE;
+
         dir->task = vfs_async_task_new( (VFSAsyncFunc)vfs_dir_load_thread, dir );
         g_signal_connect( dir->task, "finish", G_CALLBACK(on_list_task_finished), dir );
         vfs_async_task_execute( dir->task );
@@ -512,7 +573,6 @@ gpointer vfs_dir_load_thread(  VFSAsyncTask* task, VFSDir* dir )
     char* full_path;
     GDir* dir_content;
     VFSFileInfo* file;
-    /* gboolean is_desktop; */
 
     dir->file_listed = 0;
     dir->load_complete = 0;
@@ -525,9 +585,14 @@ gpointer vfs_dir_load_thread(  VFSAsyncTask* task, VFSDir* dir )
                                              dir );
 
         dir_content = g_dir_open( dir->path, 0, NULL );
+
         if ( dir_content )
         {
-            /* is_desktop = is_dir_desktop( dir->path ); */
+            GKeyFile* kf;
+
+            if( G_UNLIKELY(dir->is_trash) )
+                kf = g_key_file_new();
+
             while ( ! vfs_async_task_is_cancelled( dir->task )
                         && ( file_name = g_dir_read_name( dir_content ) ) )
             {
@@ -540,9 +605,38 @@ gpointer vfs_dir_load_thread(  VFSAsyncTask* task, VFSDir* dir )
                 if ( G_LIKELY( vfs_file_info_get( file, full_path, file_name ) ) )
                 {
                     g_mutex_lock( dir->mutex );
+
                     /* Special processing for desktop folder */
-                    /* if( G_UNLIKELY(is_desktop) ) */
                     vfs_file_info_load_special_info( file, full_path );
+
+                    /* FIXME: load info, too when new file is added to trash dir */
+                    if( G_UNLIKELY( dir->is_trash ) ) /* load info of trashed files */
+                    {
+                        gboolean info_loaded;
+                        char* info = g_strconcat( home_trash_dir, "/info/", file_name, ".trashinfo", NULL );
+
+                        info_loaded = g_key_file_load_from_file( kf, info, 0, NULL );
+                        g_free( info );
+                        if( info_loaded )
+                        {
+                            char* ori_path = g_key_file_get_string( kf, "Trash Info", "Path", NULL );
+                            if( ori_path )
+                            {
+                                /* Thanks to the stupid freedesktop.org spec, the filename is encoded
+                                 * like a URL, which is insane. This add nothing more than overhead. */
+                                char* fake_uri = g_strconcat( "file://", ori_path, NULL );
+                                g_free( ori_path );
+                                ori_path = g_filename_from_uri( fake_uri, NULL, NULL );
+                                /* g_debug( ori_path ); */
+
+                                if( file->disp_name && file->disp_name != file->name )
+                                    g_free( file->disp_name );
+                                file->disp_name = g_filename_display_basename( ori_path );
+                                g_free( ori_path );
+                            }
+                        }
+                    }
+
                     dir->file_list = g_list_prepend( dir->file_list, file );
                     g_mutex_unlock( dir->mutex );
                     ++dir->n_files;
@@ -555,6 +649,9 @@ gpointer vfs_dir_load_thread(  VFSAsyncTask* task, VFSDir* dir )
                 g_free( full_path );
             }
             g_dir_close( dir_content );
+
+            if( G_UNLIKELY(dir->is_trash) )
+                g_key_file_free( kf );
         }
     }
     return NULL;
@@ -847,6 +944,16 @@ const char* vfs_get_desktop_dir()
 #endif
     is_desktop_set = TRUE;
     return desktop_dir;
+}
+
+const char* vfs_get_trash_dir()
+{
+    if( G_UNLIKELY( ! home_trash_dir ) )
+    {
+        home_trash_dir = g_build_filename( g_get_user_data_dir(), "Trash", NULL );
+        home_trash_dir_len = strlen( home_trash_dir );
+    }
+    return home_trash_dir;
 }
 
 void vfs_dir_foreach( GHFunc func, gpointer user_data )

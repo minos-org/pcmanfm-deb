@@ -17,8 +17,10 @@ src/vfs/vfs-file-task.c
 src/vfs/vfs-volume-hal.c
 src/desktop/desktop.c
 src/desktop/desktop-window.c
+src/find-files.c
 
 data/ui/prefdlg.glade
 data/ui/file_properties.glade
 data/ui/appchooserdlg.glade
 data/ui/about-dlg.glade
+data/ui/find-files.glade

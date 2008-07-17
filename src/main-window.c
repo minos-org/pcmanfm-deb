@@ -9,6 +9,7 @@
 #  include <config.h>
 #endif
 
+#include "pcmanfm.h"
 #include "private.h"
 
 #include <gtk/gtk.h>
@@ -34,6 +35,7 @@
 #include "ptk-path-entry.h"
 
 #include "settings.h"
+#include "find-files.h"
 
 #ifdef HAVE_STATVFS
 /* FIXME: statvfs support should be moved to src/vfs */
@@ -176,6 +178,8 @@ static void on_open_terminal_activate ( GtkMenuItem *menuitem,
                                         gpointer user_data );
 static void on_open_current_folder_as_root ( GtkMenuItem *menuitem,
                                              gpointer user_data );
+static void on_find_file_activate ( GtkMenuItem *menuitem,
+                                        gpointer user_data );
 static void on_file_properties_activate ( GtkMenuItem *menuitem,
                                           gpointer user_data );
 static void on_bookmark_item_activate ( GtkMenuItem* menu, gpointer user_data );
@@ -230,8 +234,6 @@ static void fm_main_window_update_command_ui( FMMainWindow* main_window,
 static void fm_main_window_start_busy_task( FMMainWindow* main_window );
 static gboolean fm_main_window_stop_busy_task( FMMainWindow* main_window );
 
-
-extern gboolean daemon_mode;    /* defined in main.c */
 
 static GtkWindowClass *parent_class = NULL;
 
@@ -300,12 +302,12 @@ static PtkMenuItemEntry fm_file_menu[] =
     {
         PTK_IMG_MENU_ITEM( N_( "New _Window" ), "gtk-add", on_new_window_activate, GDK_N, GDK_CONTROL_MASK ),
         PTK_IMG_MENU_ITEM( N_( "New _Tab" ), "gtk-add", on_new_tab_activate, GDK_T, GDK_CONTROL_MASK ),
-        PTK_IMG_MENU_ITEM( N_( "Close Tab" ), "gtk-close", on_close_tab_activate, GDK_W, GDK_CONTROL_MASK ),
         PTK_SEPARATOR_MENU_ITEM,
         PTK_POPUP_IMG_MENU( N_( "_Create New" ), "gtk-new", fm_file_create_new_manu ),
         PTK_IMG_MENU_ITEM( N_( "File _Properties" ), "gtk-info", on_file_properties_activate, GDK_Return, GDK_MOD1_MASK ),
         PTK_SEPARATOR_MENU_ITEM,
-        PTK_STOCK_MENU_ITEM( "gtk-quit", on_quit_activate ),
+        PTK_IMG_MENU_ITEM( N_( "Close Tab" ), "gtk-close", on_close_tab_activate, GDK_W, GDK_CONTROL_MASK ),
+        PTK_IMG_MENU_ITEM( N_("_Close Window"), "gtk-quit", on_quit_activate, GDK_Q, GDK_CONTROL_MASK ),
         PTK_MENU_END
     };
 
@@ -384,6 +386,8 @@ static PtkMenuItemEntry fm_tool_menu[] =
         PTK_IMG_MENU_ITEM( N_( "Open Current Folder as _Root" ),
                            GTK_STOCK_DIALOG_AUTHENTICATION,
                            on_open_current_folder_as_root, 0, 0 ),
+        PTK_SEPARATOR_MENU_ITEM,
+        PTK_IMG_MENU_ITEM( N_( "_Find Files" ), GTK_STOCK_FIND, on_find_file_activate, GDK_F3, 0 ),
         PTK_MENU_END
     };
 
@@ -497,11 +501,17 @@ void fm_main_window_init( FMMainWindow* main_window )
     GClosure* closure;
 
     /* Initialize parent class */
-    GTK_WINDOW( main_window ) ->type = GTK_WINDOW_TOPLEVEL;
+    GTK_WINDOW( main_window )->type = GTK_WINDOW_TOPLEVEL;
+
+    /* this is used to limit the scope of gtk_grab and modal dialogs */
+    main_window->wgroup = gtk_window_group_new();
+    gtk_window_group_add_window( main_window->wgroup, (GtkWindow*)main_window );
 
     /* Add to total window count */
     ++n_windows;
     all_windows = g_list_prepend( all_windows, main_window );
+
+    pcmanfm_ref();
 
     /* Set a monitor for changes of the bookmarks */
     ptk_bookmarks_add_callback( ( GFunc ) on_bookmarks_change, main_window );
@@ -640,8 +650,9 @@ void fm_main_window_init( FMMainWindow* main_window )
 #endif
 
     /* Create client area */
-    main_window->notebook = GTK_NOTEBOOK( gtk_notebook_new () );
-    gtk_notebook_set_scrollable ( GTK_NOTEBOOK( main_window->notebook ), TRUE );
+    main_window->notebook = gtk_notebook_new();
+    gtk_notebook_set_show_border( main_window->notebook, FALSE );
+    gtk_notebook_set_scrollable ( main_window->notebook, TRUE );
     gtk_box_pack_start ( GTK_BOX ( main_window->main_vbox ), GTK_WIDGET( main_window->notebook ), TRUE, TRUE, 0 );
 
     g_signal_connect ( main_window->notebook, "switch_page",
@@ -663,18 +674,18 @@ void fm_main_window_finalize( GObject *obj )
     all_windows = g_list_remove( all_windows, obj );
     --n_windows;
 
+    g_object_unref( ((FMMainWindow*)obj)->wgroup );
+
+    pcmanfm_unref();
+
     /* Remove the monitor for changes of the bookmarks */
     ptk_bookmarks_remove_callback( ( GFunc ) on_bookmarks_change, obj );
     if ( 0 == n_windows )
     {
     	g_signal_handler_disconnect( gtk_icon_theme_get_default(), theme_change_notify );
 		theme_change_notify = 0;
-		if( !app_settings.show_desktop )
-		{
-			if( ! daemon_mode )
-				gtk_main_quit();
-		}
 	}
+
     G_OBJECT_CLASS( parent_class ) ->finalize( obj );
 }
 
@@ -782,10 +793,13 @@ void fm_main_window_add_new_tab( FMMainWindow* main_window,
 {
     GtkWidget * tab_label;
     gint idx;
-    GtkNotebook* notebook = GTK_NOTEBOOK( main_window->notebook );
+    GtkNotebook* notebook = main_window->notebook;
     PtkFileBrowser* file_browser = (PtkFileBrowser*)ptk_file_browser_new ( GTK_WIDGET( main_window ),
                                                                             app_settings.view_mode );
     gtk_paned_set_position ( GTK_PANED ( file_browser ), main_window->splitter_pos );
+    ptk_file_browser_set_single_click( file_browser, app_settings.single_click );
+    /* FIXME: this shouldn't be hard-code */
+    ptk_file_browser_set_single_click_timeout( file_browser, 400 );
     ptk_file_browser_show_hidden_files( file_browser,
                                         app_settings.show_hidden_files );
     ptk_file_browser_show_thumbnails( file_browser,
@@ -1003,16 +1017,22 @@ void
 on_about_activate ( GtkMenuItem *menuitem,
                     gpointer user_data )
 {
-    GtkWidget * aboutDialog;
-    gtk_about_dialog_set_url_hook( open_url, NULL, NULL);
+    static GtkWidget * about_dlg = NULL;
+    if( ! about_dlg )
+    {
+        gtk_about_dialog_set_url_hook( open_url, NULL, NULL);
 
-    aboutDialog = ptk_ui_xml_create_widget_from_file( PACKAGE_UI_DIR "/about-dlg.glade" );
-    gtk_about_dialog_set_version ( GTK_ABOUT_DIALOG ( aboutDialog ), VERSION );
-    gtk_about_dialog_set_logo_icon_name( GTK_ABOUT_DIALOG ( aboutDialog ), "pcmanfm" );
-    gtk_window_set_transient_for( GTK_WINDOW( aboutDialog ), GTK_WINDOW( user_data ) );
+        pcmanfm_ref();
+        about_dlg = ptk_ui_xml_create_widget_from_file( PACKAGE_UI_DIR "/about-dlg.glade" );
+        gtk_about_dialog_set_version ( GTK_ABOUT_DIALOG ( about_dlg ), VERSION );
+        gtk_about_dialog_set_logo_icon_name( GTK_ABOUT_DIALOG ( about_dlg ), "pcmanfm" );
 
-    gtk_dialog_run( GTK_DIALOG( aboutDialog ) );
-    gtk_widget_destroy( aboutDialog );
+        g_object_add_weak_pointer( about_dlg, &about_dlg );
+        g_signal_connect( about_dlg, "response", G_CALLBACK(gtk_widget_destroy), NULL );
+        g_signal_connect( about_dlg, "destroy", G_CALLBACK(pcmanfm_unref), NULL );
+    }
+    gtk_window_set_transient_for( GTK_WINDOW( about_dlg ), GTK_WINDOW( user_data ) );
+    gtk_window_present( (GtkWindow*)about_dlg );
 }
 
 
@@ -1560,7 +1580,7 @@ void fm_main_window_open_terminal( GtkWindow* parent,
         ptk_show_error( parent,
                         _("Error"),
                         _( "Terminal program has not been set" ) );
-        fm_main_window_preference( (FMMainWindow*)parent );
+        fm_edit_preference( (GtkWindow*)parent, PREF_ADVANCED );
     }
     if ( app_settings.terminal )
     {
@@ -1592,6 +1612,21 @@ void on_open_terminal_activate ( GtkMenuItem *menuitem,
     FMMainWindow * main_window = FM_MAIN_WINDOW( user_data );
     PtkFileBrowser* file_browser = PTK_FILE_BROWSER( fm_main_window_get_current_file_browser( main_window ) );
     ptk_file_browser_open_terminal( file_browser );
+}
+
+void on_find_file_activate ( GtkMenuItem *menuitem,
+                                      gpointer user_data )
+{
+    FMMainWindow * main_window = FM_MAIN_WINDOW( user_data );
+    PtkFileBrowser* file_browser;
+    const char* cwd;
+    char* dirs[2];
+    file_browser = PTK_FILE_BROWSER( fm_main_window_get_current_file_browser( main_window ) );
+    cwd = ptk_file_browser_get_cwd( file_browser );
+
+    dirs[0] = cwd;
+    dirs[1] = NULL;
+    fm_find_files( dirs );
 }
 
 void on_open_current_folder_as_root ( GtkMenuItem *menuitem,

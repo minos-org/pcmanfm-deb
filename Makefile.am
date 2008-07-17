@@ -3,7 +3,13 @@
 SUBDIRS = src po
 
 desktopdir = $(datadir)/applications
-desktop_DATA = pcmanfm.desktop
+desktop_DATA = pcmanfm.desktop \
+	       pcmanfm-find.desktop \
+	       pcmanfm-folder-handler.desktop
+@INTLTOOL_DESKTOP_RULE@
+DISTCLEANFILES = pcmanfm.desktop \
+		 pcmanfm-find.desktop \
+		 pcmanfm-folder-handler.desktop
 
 mimedir = $(datadir)/mime/packages
 mime_DATA = src/mime-type/libmimetype.xml
@@ -24,7 +30,8 @@ ui_DATA= \
 	data/ui/prefdlg.glade \
 	data/ui/appchooserdlg.glade \
 	data/ui/file_properties.glade \
-	data/ui/about-dlg.glade
+	data/ui/about-dlg.glade \
+	data/ui/find-files.glade
 
 EXTRA_DIST = \
 	autogen.sh \

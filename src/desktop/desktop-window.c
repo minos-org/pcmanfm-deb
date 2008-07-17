@@ -24,6 +24,7 @@
 #include "desktop-window.h"
 #include "vfs-file-info.h"
 #include "vfs-mime-type.h"
+#include "vfs-thumbnail-loader.h"
 
 #include "glib-mem.h"
 #include "working-area.h"
@@ -37,11 +38,14 @@
 #include "main-window.h"
 #include "pref-dialog.h"
 #include "ptk-file-browser.h"
+#include "ptk-clipboard.h"
 
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
 #include <gdk/gdkx.h>
 #include <gdk/gdkkeysyms.h>
+
+#include <string.h>
 
 /* for stat */
 #include <sys/types.h>
@@ -297,7 +301,7 @@ static void desktop_window_init(DesktopWindow *self)
 
     self->label_w = 100;
     self->icon_size = 48;
-    self->spacing = 1;
+    self->spacing = 0;
     self->x_pad = 6;
     self->y_pad = 6;
     self->y_margin = 6;
@@ -359,6 +363,9 @@ void desktop_window_finalize(GObject *object)
 
     if( self->background )
         g_object_unref( self->background );
+
+    if( self->hand_cursor )
+        gdk_cursor_unref( self->hand_cursor );
 
     self = DESKTOP_WINDOW(object);
     g_object_unref( self->dir );
@@ -888,6 +895,24 @@ static void update_rubberbanding( DesktopWindow* self, int newx, int newy )
     }
 }
 
+static void open_clicked_item( DesktopItem* clicked_item )
+{
+    if( vfs_file_info_is_dir( clicked_item->fi ) )  /* this is a folder */
+    {
+        GList* sel_files = NULL;
+        sel_files = g_list_prepend( sel_files, clicked_item->fi );
+        open_folders( sel_files );
+        g_list_free( sel_files );
+    }
+    else /* regular files */
+    {
+        GList* sel_files = NULL;
+        sel_files = g_list_prepend( sel_files, clicked_item->fi );
+        ptk_open_files_with_app( vfs_get_desktop_dir(), sel_files, NULL, NULL );
+        g_list_free( sel_files );
+    }
+}
+
 gboolean on_button_press( GtkWidget* w, GdkEventButton* evt )
 {
     DesktopWindow* self = (DesktopWindow*)w;
@@ -1001,20 +1026,7 @@ gboolean on_button_press( GtkWidget* w, GdkEventButton* evt )
     {
         if( clicked_item && evt->button == 1)   /* left double click */
         {
-            if( vfs_file_info_is_dir( clicked_item->fi ) )  /* this is a folder */
-            {
-                GList* sel_files = NULL;
-                sel_files = g_list_prepend( sel_files, clicked_item->fi );
-                open_folders( sel_files );
-                g_list_free( sel_files );
-            }
-            else /* regular files */
-            {
-                GList* sel_files = NULL;
-                sel_files = g_list_prepend( sel_files, clicked_item->fi );
-                ptk_open_files_with_app( vfs_get_desktop_dir(), sel_files, NULL, NULL );
-                g_list_free( sel_files );
-            }
+            open_clicked_item( clicked_item );
             goto out;
         }
     }
@@ -1033,6 +1045,7 @@ out:
 gboolean on_button_release( GtkWidget* w, GdkEventButton* evt )
 {
     DesktopWindow* self = (DesktopWindow*)w;
+    DesktopItem* clicked_item = hit_test( self, evt->x, evt->y );
 
     self->button_pressed = FALSE;
 
@@ -1046,12 +1059,40 @@ gboolean on_button_release( GtkWidget* w, GdkEventButton* evt )
     {
         self->dragging = FALSE;
     }
+    else if( self->single_click && evt->button == 1 && (GDK_BUTTON1_MASK == evt->state) )
+    {
+        if( clicked_item )
+        {
+            open_clicked_item( clicked_item );
+            return TRUE;
+        }
+    }
 
     /* forward the event to root window */
-    if( ! hit_test( w, (int)evt->x, (int)evt->y ) )
+    if( ! clicked_item )
         forward_event_to_rootwin( gtk_widget_get_screen(w), evt );
 
     return TRUE;
+}
+
+static gboolean on_single_click_timeout( DesktopWindow* self )
+{
+    GtkWidget* w = (GtkWidget*)self;
+    GdkEventButton evt;
+    int x, y;
+
+    /* generate a fake button press */
+    /* FIXME: will this cause any problem? */
+    evt.type = GDK_BUTTON_PRESS;
+    evt.window = w->window;
+    gdk_window_get_pointer( w->window, &x, &y, &evt.state );
+    evt.x = x;
+    evt.y = y;
+    evt.state |= GDK_BUTTON_PRESS_MASK;
+    evt.state &= ~GDK_BUTTON_MOTION_MASK;
+    on_button_press( self, &evt );
+
+    return FALSE;
 }
 
 gboolean on_mouse_move( GtkWidget* w, GdkEventMotion* evt )
@@ -1059,7 +1100,34 @@ gboolean on_mouse_move( GtkWidget* w, GdkEventMotion* evt )
     DesktopWindow* self = (DesktopWindow*)w;
 
     if( ! self->button_pressed )
+    {
+        if( self->single_click )
+        {
+            DesktopItem* item = hit_test( self, evt->x, evt->y );
+            if( item != self->hover_item )
+            {
+                if( 0 != self->single_click_timeout_handler )
+                {
+                    g_source_remove( self->single_click_timeout_handler );
+                    self->single_click_timeout_handler = 0;
+                }
+            }
+            if( item )
+            {
+                gdk_window_set_cursor( w->window, self->hand_cursor );
+                /* FIXME: timeout should be customizable */
+                if( 0 == self->single_click_timeout_handler )
+                    self->single_click_timeout_handler = g_timeout_add( 400, on_single_click_timeout, self );
+            }
+            else
+            {
+                gdk_window_set_cursor( w->window, NULL );
+            }
+            self->hover_item = item;
+        }
+
         return TRUE;
+    }
 
     if( self->dragging )
     {
@@ -1275,8 +1343,29 @@ static char** get_files_from_selection_data(GtkSelectionData* data)
         {
             char* file = g_filename_from_uri( *pfile, NULL, NULL );
             g_free( *pfile );
-            *pfile = file;
+            if( file )
+                *pfile = file;
+            else
+            {
+                /* FIXME: This is very inefficient, but it's a rare case. */
+                int n = g_strv_length( pfile + 1 );
+                if( n > 0 )
+                {
+                    memmove( pfile, file + sizeof(char*), sizeof(char*) * (n + 1) );    /* omit the path if conversion fails */
+                    --pfile;
+                }
+                else
+                {
+                    *pfile = NULL;
+                    break;
+                }
+            }
         }
+    }
+    if( files && ! *files )
+    {
+        g_strfreev( files );
+        files = NULL;
     }
     return files;
 }
@@ -1362,22 +1451,24 @@ void on_drag_data_received( GtkWidget* w, GdkDragContext* ctx, gint x, gint y, G
         }
 
         files = get_files_from_selection_data( data );
-        /* g_debug("file_atcion: %d", file_action); */
-        file_list = NULL;
-        n = g_strv_length( files );
-        for( i = 0; i < n; ++i )
-            file_list = g_list_prepend( file_list, files[i] );
-        g_free( files );
+        if( files )
+        {
+            /* g_debug("file_atcion: %d", file_action); */
+            file_list = NULL;
+            n = g_strv_length( files );
+            for( i = 0; i < n; ++i )
+                file_list = g_list_prepend( file_list, files[i] );
+            g_free( files );
 
-        task = ptk_file_task_new( file_action,
-                                  file_list,
-                                  dest_dir ? dest_dir : vfs_get_desktop_dir(),
-                                  GTK_WINDOW( self ) );
-        ptk_file_task_run( task );
-
+            task = ptk_file_task_new( file_action,
+                                      file_list,
+                                      dest_dir ? dest_dir : vfs_get_desktop_dir(),
+                                      GTK_WINDOW( self ) );
+            ptk_file_task_run( task );
+        }
         g_free( dest_dir );
 
-        gtk_drag_finish( ctx, TRUE, FALSE, time );
+        gtk_drag_finish( ctx, files != NULL, FALSE, time );
     }
     else if( data->target == desktop_icon_atom ) /* moving desktop icon */
     {
@@ -2325,6 +2416,25 @@ void forward_event_to_rootwin( GdkScreen *gscreen, GdkEvent *event )
 
     XSendEvent( dpy, xev2.window, False, ButtonPressMask | ButtonReleaseMask,
                 ( XEvent * ) & xev2 );
+}
+
+/* FIXME: set single click timeout */
+void desktop_window_set_single_click( DesktopWindow* win, gboolean single_click )
+{
+    if( single_click == win->single_click )
+        return;
+    win->single_click = single_click;
+    if( single_click )
+    {
+        win->hand_cursor = gdk_cursor_new_for_display( gtk_widget_get_display(win), GDK_HAND2 );
+    }
+    else
+    {
+        gdk_cursor_unref( win->hand_cursor );
+        win->hand_cursor = NULL;
+        if( GTK_WIDGET_REALIZED(win) )
+            gdk_window_set_cursor( ((GtkWidget*)win)->window, NULL );
+    }
 }
 
 #if 0

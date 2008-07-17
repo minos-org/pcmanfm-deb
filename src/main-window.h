@@ -55,6 +55,7 @@ typedef struct _FMMainWindow
   GtkAccelGroup *accel_group;
   GtkTooltips *tooltips;
 
+  GtkWindowGroup* wgroup;
   int n_busy_tasks;
 }FMMainWindow;
 
