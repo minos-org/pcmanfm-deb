@@ -7,9 +7,9 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PCMan File Manager 0.3.6\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2009-04-21 02:21+0800\n"
-"PO-Revision-Date: 2009-05-29 07:41+0100\n"
-"Last-Translator: SZERVÁC Attila <sas@321.hu>\n"
+"POT-Creation-Date: 2009-10-26 16:22+0100\n"
+"PO-Revision-Date: 2009-07-15 08:38+0100\n"
+"Last-Translator: Zsolt Peter Basak <shiki@biomernok.hu>\n"
 "Language-Team: Hungarian <hu@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -48,7 +48,6 @@ msgid "translator-credits"
 msgstr "SZERVÁC Attila"
 
 #: ../data/ui/about-dlg.glade.h:10
-#, fuzzy
 msgid ""
 "洪任諭 Hong Jen Yee <pcman.tw@gmail.com>\n"
 "\n"
@@ -65,15 +64,15 @@ msgid ""
 msgstr ""
 "洪任諭 Hong Jen Yee <pcman.tw@gmail.com>\n"
 "\n"
-"Más projektek forráskódjai:\n"
+"Source code taken from other projects:\n"
 " * libmd5-rfc: Aladdin Enterprises\n"
-" * Munkaterület érzékelés: Gary Kramlich\n"
+" * Working area detection: Gary Kramlich\n"
 " * ExoIconView: os-cillation e.K, Anders Carlsson, & Benedikt Meurer\n"
-" * A szöveg- és ikonrajzoló használja Jonathan Blandford kódjait\n"
-" * Az asztali ikonok használják Brian Tarricone kódjait\n"
-" * A kötetkezelő használja az alábbi projektek/szerzők kódjait:\n"
+" * Text and icon renderer uses code from Jonathan Blandford\n"
+" * Desktop icons use code from Brian Tarricone\n"
+" * Volume management uses code from following projects/authors:\n"
 "     * gnome-vfs: David Zeuthen\n"
-"     * thunar-vfs és libexo: Benedikt Meurer\n"
+"     * thunar-vfs and libexo: Benedikt Meurer\n"
 "     * gnome-mount: David Zeuthen"
 
 #: ../data/ui/appchooserdlg.glade.h:1
@@ -89,8 +88,11 @@ msgid "Opened in Terminal"
 msgstr "Megnyitás Terminálban"
 
 #: ../data/ui/appchooserdlg.glade.h:4
-msgid "Please choose an application from following lists or enter the command line by hand:"
-msgstr "Válassz egy alkalmazást az alábbi listákból, vagy add meg a parancsot kézzel:"
+msgid ""
+"Please choose an application from following lists or enter the command line "
+"by hand:"
+msgstr ""
+"Válassz egy alkalmazást az alábbi listákból, vagy add meg a parancsot kézzel:"
 
 #: ../data/ui/appchooserdlg.glade.h:5
 msgid "Set selected application to default action"
@@ -140,33 +142,27 @@ msgstr "Mozgatás _le:"
 msgid "Move _Up"
 msgstr "Mozgatás _fel:"
 
-#. Preparing to do some file operation (Copy, Move, Delete...)
+#. Processing: <Name of currently proccesed file>
 #: ../data/ui/file_operation.glade.h:2
-#: ../src/ptk/ptk-file-task.c:176
-msgid "Preparing..."
-msgstr "Előkészítés..."
-
-#. Processing: <Name of currently proccesed file>
-#. Processing:
-#. Processing: <Name of currently proccesed file>
-#: ../data/ui/file_operation.glade.h:4
-#: ../src/ptk/ptk-file-task.c:169
-msgid "Processing:"
+#, fuzzy
+msgid "<b>Processing:</b>"
 msgstr "Feldolgozás:"
 
-#. Progress:
-#: ../data/ui/file_operation.glade.h:5
-#: ../src/ptk/ptk-file-task.c:184
-msgid "Progress:"
+#: ../data/ui/file_operation.glade.h:3
+#, fuzzy
+msgid "<b>Progress:</b>"
 msgstr "Folyamat:"
 
 #. To: <Destination folder> ex. Copy file to..., Move file to...etc.
-#. To: <Destination folder>
-#. ex. Copy file to..., Move file to...etc.
-#: ../data/ui/file_operation.glade.h:7
-#: ../src/ptk/ptk-file-task.c:154
-msgid "To:"
-msgstr "Ide:"
+#: ../data/ui/file_operation.glade.h:5
+#, fuzzy
+msgid "<b>To:</b>"
+msgstr "<b>Csoport:</b>"
+
+#. Preparing to do some file operation (Copy, Move, Delete...)
+#: ../data/ui/file_operation.glade.h:7 ../src/ptk/ptk-file-task.c:176
+msgid "Preparing..."
+msgstr "Előkészítés..."
 
 #: ../data/ui/file_properties.glade.h:1
 msgid "<b>File Type:</b>"
@@ -251,8 +247,7 @@ msgstr "Ragadós"
 msgid "Write"
 msgstr "Ír"
 
-#: ../data/ui/file_properties.glade.h:24
-#: ../data/ui/prefdlg.glade.h:41
+#: ../data/ui/file_properties.glade.h:24 ../data/ui/prefdlg.glade.h:41
 msgid "_General"
 msgstr "Általá_nos"
 
@@ -301,6 +296,12 @@ msgid ""
 "Within One Year\n"
 "Within Selected Date Range"
 msgstr ""
+"Bármely\n"
+"Egy napon belül\n"
+"Egy héten belül\n"
+"Egy hónapon belül\n"
+"Egy éven belül\n"
+" "
 
 #: ../data/ui/find-files.glade.h:15
 msgid "Audio Files (mp3, ogg,...)"
@@ -360,7 +361,7 @@ msgstr "Rejtett fájlok keresése"
 
 #: ../data/ui/find-files.glade.h:30
 msgid "Search in Sub Directories"
-msgstr ""
+msgstr "Keresés Almappákban is"
 
 #: ../data/ui/find-files.glade.h:31
 msgid "Size & Date"
@@ -404,7 +405,7 @@ msgstr "<b>Tapéta</b>"
 
 #: ../data/ui/prefdlg.glade.h:6
 msgid "Always show the tab bar"
-msgstr ""
+msgstr "Fül sáv állandó mutatása"
 
 #: ../data/ui/prefdlg.glade.h:7
 msgid "Background:"
@@ -416,7 +417,7 @@ msgstr "Könyvjelzők"
 
 #: ../data/ui/prefdlg.glade.h:9
 msgid "Disable \"Trash Can\" and delete files from disk directly"
-msgstr ""
+msgstr "\"Lomtár\" kikapcsolása, s a fájlok közvetlen törlése"
 
 #: ../data/ui/prefdlg.glade.h:10
 msgid "Display image files with supported format as thumbnails"
@@ -424,23 +425,23 @@ msgstr "Támogatott formátumú fájlok megjelenítése előképként"
 
 #: ../data/ui/prefdlg.glade.h:11
 msgid "Hide 'Close tab' buttons"
-msgstr ""
+msgstr "'Fül bezárása' gombok elrejtése"
 
 #: ../data/ui/prefdlg.glade.h:12
 msgid "Hide folder content border"
-msgstr ""
+msgstr "'Mappa tartalma' keret eltüntetése"
 
 #: ../data/ui/prefdlg.glade.h:13
 msgid "Hide side pane buttons"
-msgstr ""
+msgstr "Oldalsó mező gombok eltüntetése"
 
 #: ../data/ui/prefdlg.glade.h:14
 msgid "I_nterface"
-msgstr ""
+msgstr "F_elület"
 
 #: ../data/ui/prefdlg.glade.h:15
 msgid "Manage the desktop and show file icons"
-msgstr ""
+msgstr "Asztal kezelése, s fájl ikonok mutatása"
 
 #: ../data/ui/prefdlg.glade.h:16
 msgid "Max size of files displayed as thumbnails:"
@@ -598,23 +599,25 @@ msgstr ""
 
 #: ../src/exo/exo-icon-view.c:814
 msgid "Icon View Model"
-msgstr ""
+msgstr "Ikon nézet"
 
 #: ../src/exo/exo-icon-view.c:815
 msgid "The model for the icon view"
-msgstr ""
+msgstr "Az ikon nézethez tartozó model"
 
 #: ../src/exo/exo-icon-view.c:828
 msgid "Orientation"
-msgstr ""
+msgstr "Elrendezés"
 
 #: ../src/exo/exo-icon-view.c:829
-msgid "How the text and icon of each item are positioned relative to each other"
-msgstr ""
+#, fuzzy
+msgid ""
+"How the text and icon of each item are positioned relative to each other"
+msgstr "Hogy legyen a szöveg és az ikon elhelyezve relatívan a többihez képest"
 
 #: ../src/exo/exo-icon-view.c:845
 msgid "Pixbuf column"
-msgstr ""
+msgstr "Pixbuf oszlop"
 
 #: ../src/exo/exo-icon-view.c:846
 msgid "Model column used to retrieve the icon pixbuf from"
@@ -622,23 +625,23 @@ msgstr ""
 
 #: ../src/exo/exo-icon-view.c:861
 msgid "Reorderable"
-msgstr ""
+msgstr "Újrarendezhető"
 
 #: ../src/exo/exo-icon-view.c:862
 msgid "View is reorderable"
-msgstr ""
+msgstr "A nézet újrarendezhető"
 
 #: ../src/exo/exo-icon-view.c:877
 msgid "Row Spacing"
-msgstr ""
+msgstr "Sor Térköz"
 
 #: ../src/exo/exo-icon-view.c:878
 msgid "Space which is inserted between grid rows"
-msgstr ""
+msgstr "Térköz ami a rács sorok közé kerül"
 
 #: ../src/exo/exo-icon-view.c:892
 msgid "Search Column"
-msgstr ""
+msgstr "Kereső Oszlop"
 
 #: ../src/exo/exo-icon-view.c:893
 msgid "Model column to search through when searching through item"
@@ -650,35 +653,35 @@ msgstr "Kijelölő mód"
 
 #: ../src/exo/exo-icon-view.c:908
 msgid "The selection mode"
-msgstr ""
+msgstr "Kijelölés mód"
 
-#: ../src/exo/exo-icon-view.c:923
-#: ../src/exo/exo-tree-view.c:201
+#: ../src/exo/exo-icon-view.c:923 ../src/exo/exo-tree-view.c:201
 msgid "Single Click"
-msgstr ""
+msgstr "Kattintás"
 
-#: ../src/exo/exo-icon-view.c:924
-#: ../src/exo/exo-tree-view.c:202
+#: ../src/exo/exo-icon-view.c:924 ../src/exo/exo-tree-view.c:202
 msgid "Whether the items in the view can be activated with single clicks"
 msgstr ""
+"Az elemek bekapcsolhatóak legyenek e a nézetben egy egyszerű kattintással"
 
-#: ../src/exo/exo-icon-view.c:940
-#: ../src/exo/exo-tree-view.c:218
+#: ../src/exo/exo-icon-view.c:940 ../src/exo/exo-tree-view.c:218
 msgid "Single Click Timeout"
-msgstr ""
+msgstr "Szimpla kattintás időtúllépése"
 
-#: ../src/exo/exo-icon-view.c:941
-#: ../src/exo/exo-tree-view.c:219
-msgid "The amount of time after which the item under the mouse cursor will be selected automatically in single click mode"
+#: ../src/exo/exo-icon-view.c:941 ../src/exo/exo-tree-view.c:219
+msgid ""
+"The amount of time after which the item under the mouse cursor will be "
+"selected automatically in single click mode"
 msgstr ""
+"Az időtartam amely szükséges egy elem kijelöléséhez a kurzor rajtatartásával"
 
 #: ../src/exo/exo-icon-view.c:956
 msgid "Spacing"
-msgstr ""
+msgstr "Térköz"
 
 #: ../src/exo/exo-icon-view.c:957
 msgid "Space which is inserted between cells of an item"
-msgstr ""
+msgstr "Térköz amely az elem cellái közé kerül"
 
 #: ../src/exo/exo-icon-view.c:972
 msgid "Text column"
@@ -763,12 +766,18 @@ msgid "Run PCManFM as a daemon"
 msgstr "PCManFM futtatása démonként"
 
 #: ../src/main.c:94
-msgid "Open folders in new tabs of the last used window instead of creating new windows"
+msgid ""
+"Open folders in new tabs of the last used window instead of creating new "
+"windows"
 msgstr "Mappák megnyitása a legutóbbi ablak lapjain új ablak helyett"
 
 #: ../src/main.c:95
-msgid "Open preference dialog. 'n' is the number of page you want to show (1, 2, 3...)."
+msgid ""
+"Open preference dialog. 'n' is the number of page you want to show (1, 2, "
+"3...)."
 msgstr ""
+"Tulajdonságok ablak megnyitása. 'n' a lap száma amit szeretnél megjeleníteni "
+"(1, 2, 3...)."
 
 #: ../src/main.c:96
 msgid "Find Files with PCManFM"
@@ -782,55 +791,60 @@ msgstr "Asztali tapéta beállítása"
 msgid "[FILE1, FILE2,...]"
 msgstr "[FÁJL1, FÁJL2,...]"
 
-#: ../src/main.c:332
+#: ../src/main.c:339
 msgid "GTK+ icon theme is not properly set"
 msgstr "A GTK+ ikon téma nincs helyesen beállítva"
 
-#: ../src/main.c:334
+#: ../src/main.c:341
 #, c-format
 msgid ""
 "<big><b>%s</b></big>\n"
 "\n"
-"This usually means you don't have an XSETTINGS manager running.  Desktop environment like GNOME or XFCE automatically execute their XSETTING managers like gnome-settings-daemon or xfce-mcs-manager.\n"
+"This usually means you don't have an XSETTINGS manager running.  Desktop "
+"environment like GNOME or XFCE automatically execute their XSETTING managers "
+"like gnome-settings-daemon or xfce-mcs-manager.\n"
 "\n"
 "<b>If you don't use these desktop environments, you have two choices:\n"
 "1. run an XSETTINGS manager, or\n"
 "2. simply specify an icon theme in ~/.gtkrc-2.0.</b>\n"
 "For example to use the Tango icon theme add a line:\n"
-"<i><b>gtk-icon-theme-name=\"Tango\"</b></i> in your ~/.gtkrc-2.0. (create it if no such file)\n"
+"<i><b>gtk-icon-theme-name=\"Tango\"</b></i> in your ~/.gtkrc-2.0. (create it "
+"if no such file)\n"
 "\n"
-"<b>NOTICE: The icon theme you choose should be compatible with GNOME, or the file icons cannot be displayed correctly.</b>  Due to the differences in icon naming of GNOME and KDE, KDE themes cannot be used.  Currently there is no standard for this, but it will be solved by freedesktop.org in the future."
+"<b>NOTICE: The icon theme you choose should be compatible with GNOME, or the "
+"file icons cannot be displayed correctly.</b>  Due to the differences in "
+"icon naming of GNOME and KDE, KDE themes cannot be used.  Currently there is "
+"no standard for this, but it will be solved by freedesktop.org in the future."
 msgstr ""
 "<big><b>%s</b></big>\n"
 "\n"
-"Valószínűleg nem futtatsz XSETTINGS kezelőt.  Az Xfce vagy GNOME munkakörnyezetek automatikusan futtatják xfce-mcs-manager vagy gnome-settings-daemon XSETTING kezelőjüket.\n"
+"Valószínűleg nem futtatsz XSETTINGS kezelőt.  Az Xfce vagy GNOME "
+"munkakörnyezetek automatikusan futtatják xfce-mcs-manager vagy gnome-"
+"settings-daemon XSETTING kezelőjüket.\n"
 "\n"
 "<b>Ha nem használod ezeket 2 lehetőséged van:\n"
 "1. futtas egy XSETTINGS kezelőt, vagy\n"
 "2. egyszerűen adj meg egy ikon témát a ~/.gtkrc-2.0 fájlban.</b>\n"
 "Például a Tango ikon témához adj egy ilyen sort:\n"
-"<i><b>gtk-icon-theme-name=\"Tango\"</b></i> a ~/.gtkrc-2.0 fájlodban. (hozd létre, ha nincs)\n"
+"<i><b>gtk-icon-theme-name=\"Tango\"</b></i> a ~/.gtkrc-2.0 fájlodban. (hozd "
+"létre, ha nincs)\n"
 "\n"
-"<b>MEGJEGYZÉS: Az ikon téma Xfce/GNOME kompatibilis kell legyen, különben a fájl ikonok nem jelennek meg helyesen.</b>  Ezek és a KDE ikon nevek közti eltérés miatt, a KDE témák nem használhatók.  Még nincs erre szabvány, de a freedesktop.org megoldja a jövőben."
+"<b>MEGJEGYZÉS: Az ikon téma Xfce/GNOME kompatibilis kell legyen, különben a "
+"fájl ikonok nem jelennek meg helyesen.</b>  Ezek és a KDE ikon nevek közti "
+"eltérés miatt, a KDE témák nem használhatók.  Még nincs erre szabvány, de a "
+"freedesktop.org megoldja a jövőben."
 
-#: ../src/main.c:662
-#: ../src/main.c:731
-#: ../src/main.c:782
-#: ../src/main-window.c:1704
-#: ../src/main-window.c:1771
-#: ../src/ptk/ptk-file-browser.c:520
-#: ../src/ptk/ptk-file-browser.c:538
-#: ../src/ptk/ptk-file-task.c:332
-#: ../src/ptk/ptk-console-output.c:225
-#: ../src/ptk/ptk-file-misc.c:258
-#: ../src/ptk/ptk-file-misc.c:326
-#: ../src/ptk/ptk-file-misc.c:415
-#: ../src/ptk/ptk-file-properties.c:701
+#: ../src/main.c:678 ../src/main.c:747 ../src/main.c:798
+#: ../src/main-window.c:1704 ../src/main-window.c:1771
+#: ../src/ptk/ptk-file-browser.c:520 ../src/ptk/ptk-file-browser.c:538
+#: ../src/ptk/ptk-file-task.c:332 ../src/ptk/ptk-console-output.c:225
+#: ../src/ptk/ptk-file-misc.c:258 ../src/ptk/ptk-file-misc.c:326
+#: ../src/ptk/ptk-file-misc.c:415 ../src/ptk/ptk-file-properties.c:701
 #: ../src/ptk/ptk-file-properties.c:712
 msgid "Error"
 msgstr "Hiba"
 
-#: ../src/main.c:662
+#: ../src/main.c:678
 msgid ""
 "Error: Unable to establish connection with FAM.\n"
 "\n"
@@ -840,15 +854,15 @@ msgstr ""
 "\n"
 "A \"FAM\" vagy \"Gamin\" telepítve van és fut?"
 
-#: ../src/main.c:731
+#: ../src/main.c:747
 msgid "File doesn't exist"
 msgstr "A fájl nem létezik"
 
-#: ../src/main.c:778
+#: ../src/main.c:794
 msgid "Don't know how to open the file"
 msgstr "Nincs adatom e fájl megnyitásáról"
 
-#: ../src/main.c:780
+#: ../src/main.c:796
 #, c-format
 msgid ""
 "Unable to open file:\n"
@@ -859,14 +873,12 @@ msgstr ""
 "\"%s\"\n"
 "%s"
 
-#: ../src/main-window.c:304
-#: ../src/ptk/ptk-file-menu.c:109
+#: ../src/main-window.c:304 ../src/ptk/ptk-file-menu.c:109
 #: ../src/desktop/desktop-window.c:186
 msgid "_Folder"
 msgstr "_Mappa"
 
-#: ../src/main-window.c:305
-#: ../src/ptk/ptk-file-menu.c:110
+#: ../src/main-window.c:305 ../src/ptk/ptk-file-menu.c:110
 #: ../src/desktop/desktop-window.c:187
 msgid "_Text File"
 msgstr "_Szövegfájl"
@@ -879,8 +891,7 @@ msgstr "Új _ablak"
 msgid "New _Tab"
 msgstr "Új _lap"
 
-#: ../src/main-window.c:314
-#: ../src/ptk/ptk-file-menu.c:133
+#: ../src/main-window.c:314 ../src/ptk/ptk-file-menu.c:133
 #: ../src/desktop/desktop-window.c:196
 msgid "_Create New"
 msgstr "Ú_j"
@@ -897,13 +908,11 @@ msgstr "Lap bezárása"
 msgid "_Close Window"
 msgstr "Ablak bezárása"
 
-#: ../src/main-window.c:327
-#: ../src/ptk/ptk-file-menu.c:128
+#: ../src/main-window.c:327 ../src/ptk/ptk-file-menu.c:128
 msgid "_Delete"
 msgstr "_Törlés"
 
-#: ../src/main-window.c:328
-#: ../src/ptk/ptk-file-browser.c:1396
+#: ../src/main-window.c:328 ../src/ptk/ptk-file-browser.c:1396
 #: ../src/ptk/ptk-file-menu.c:129
 msgid "_Rename"
 msgstr "Át_nevezés"
@@ -932,23 +941,19 @@ msgstr "_Szülő"
 msgid "Go _Home"
 msgstr "_Haza"
 
-#: ../src/main-window.c:355
-#: ../src/desktop/desktop-window.c:173
+#: ../src/main-window.c:355 ../src/desktop/desktop-window.c:173
 msgid "Sort by _Name"
 msgstr "_Név"
 
-#: ../src/main-window.c:356
-#: ../src/desktop/desktop-window.c:174
+#: ../src/main-window.c:356 ../src/desktop/desktop-window.c:174
 msgid "Sort by _Size"
 msgstr "_Méret"
 
-#: ../src/main-window.c:357
-#: ../src/desktop/desktop-window.c:176
+#: ../src/main-window.c:357 ../src/desktop/desktop-window.c:176
 msgid "Sort by _Modification Time"
 msgstr "Rendezés módosítás szerint"
 
-#: ../src/main-window.c:358
-#: ../src/desktop/desktop-window.c:175
+#: ../src/main-window.c:358 ../src/desktop/desktop-window.c:175
 msgid "Sort by _Type"
 msgstr "Rendezés típus szerint"
 
@@ -960,13 +965,11 @@ msgstr "Rendezés jogok szerint"
 msgid "Sort by _Owner"
 msgstr "Rendezés tulajdonos szerint"
 
-#: ../src/main-window.c:362
-#: ../src/desktop/desktop-window.c:179
+#: ../src/main-window.c:362 ../src/desktop/desktop-window.c:179
 msgid "Ascending"
 msgstr "Növekvő"
 
-#: ../src/main-window.c:363
-#: ../src/desktop/desktop-window.c:180
+#: ../src/main-window.c:363 ../src/desktop/desktop-window.c:180
 msgid "Descending"
 msgstr "Csökkenő"
 
@@ -1135,29 +1138,24 @@ msgstr[0] "%d látható elem (%s)%s"
 msgid "Directory doesn't exist!"
 msgstr "A könyvtár nem létezik!"
 
-#: ../src/ptk/ptk-file-browser.c:1392
-#: ../src/ptk/ptk-file-menu.c:142
+#: ../src/ptk/ptk-file-browser.c:1392 ../src/ptk/ptk-file-menu.c:142
 msgid "Open in New _Tab"
 msgstr "Megnyitás új _lapon"
 
-#: ../src/ptk/ptk-file-browser.c:1393
-#: ../src/ptk/ptk-file-menu.c:143
+#: ../src/ptk/ptk-file-browser.c:1393 ../src/ptk/ptk-file-menu.c:143
 msgid "Open in New _Window"
 msgstr "Megnyitás új ablakban"
 
-#: ../src/ptk/ptk-file-browser.c:1646
-#: ../src/edit-bookmarks.c:201
+#: ../src/ptk/ptk-file-browser.c:1646 ../src/edit-bookmarks.c:201
 #: ../src/find-files.c:799
 msgid "Name"
 msgstr "Név"
 
-#: ../src/ptk/ptk-file-browser.c:1646
-#: ../src/find-files.c:820
+#: ../src/ptk/ptk-file-browser.c:1646 ../src/find-files.c:820
 msgid "Size"
 msgstr "Méret"
 
-#: ../src/ptk/ptk-file-browser.c:1646
-#: ../src/find-files.c:824
+#: ../src/ptk/ptk-file-browser.c:1646 ../src/find-files.c:824
 msgid "Type"
 msgstr "Típus"
 
@@ -1189,8 +1187,7 @@ msgstr "Kuka"
 msgid "Desktop"
 msgstr "Munkaasztal"
 
-#: ../src/ptk/ptk-location-view.c:441
-#: ../src/ptk/ptk-location-view.c:635
+#: ../src/ptk/ptk-location-view.c:441 ../src/ptk/ptk-location-view.c:635
 msgid "Unable to mount device"
 msgstr "Eszköz csatolása sikertelen"
 
@@ -1262,6 +1259,23 @@ msgstr "Láncolás..."
 msgid "Changing Properties"
 msgstr "Tulajdonságok megváltoztatása"
 
+#. To: <Destination folder>
+#. ex. Copy file to..., Move file to...etc.
+#: ../src/ptk/ptk-file-task.c:154
+msgid "To:"
+msgstr "Ide:"
+
+#. Processing:
+#. Processing: <Name of currently proccesed file>
+#: ../src/ptk/ptk-file-task.c:169
+msgid "Processing:"
+msgstr "Feldolgozás:"
+
+#. Progress:
+#: ../src/ptk/ptk-file-task.c:184
+msgid "Progress:"
+msgstr "Folyamat:"
+
 #: ../src/ptk/ptk-file-task.c:320
 msgid "Cancel the operation?"
 msgstr "Törlöd a műveletet?"
@@ -1330,33 +1344,34 @@ msgstr "Kihagy"
 msgid "Skip All"
 msgstr "Mindet kihagyja"
 
-#: ../src/ptk/ptk-file-archiver.c:119
+#: ../src/ptk/ptk-file-archiver.c:125
+#, fuzzy
 msgid "Save Compressed Files to..."
 msgstr "Tömörített fájlok mentése ide..."
 
-#: ../src/ptk/ptk-file-archiver.c:127
+#: ../src/ptk/ptk-file-archiver.c:133
 msgid "Format of compressed File:"
 msgstr "Tömörített fájl formátuma:"
 
-#: ../src/ptk/ptk-file-archiver.c:198
+#: ../src/ptk/ptk-file-archiver.c:204
 #, c-format
 msgid "Creating Compressed File: %s"
 msgstr "Tömörített fájl létrehozása: %s"
 
-#: ../src/ptk/ptk-file-archiver.c:201
+#: ../src/ptk/ptk-file-archiver.c:207
 msgid "Compress Files"
 msgstr "Fájlok tömörítése"
 
-#: ../src/ptk/ptk-file-archiver.c:232
+#: ../src/ptk/ptk-file-archiver.c:238
 msgid "Extract File to..."
 msgstr "Fájlok kibontása ide..."
 
-#: ../src/ptk/ptk-file-archiver.c:281
+#: ../src/ptk/ptk-file-archiver.c:287
 #, c-format
 msgid "Extracting Files to: %s"
 msgstr "Fájlok kibontása ide: %s"
 
-#: ../src/ptk/ptk-file-archiver.c:283
+#: ../src/ptk/ptk-file-archiver.c:289
 msgid "Extract Files"
 msgstr "Fájlok kibontása"
 
@@ -1422,8 +1437,7 @@ msgid "_Open with \"%s\""
 msgstr "Megnyitás _ezzel: \"%s\""
 
 #. delete some confusing menu item if this menu is for current folder
-#: ../src/ptk/ptk-file-menu.c:408
-#: ../src/ptk/ptk-file-menu.c:417
+#: ../src/ptk/ptk-file-menu.c:408 ../src/ptk/ptk-file-menu.c:417
 #: ../src/find-files.c:229
 msgid "_Open"
 msgstr "Megnyitás"
@@ -1440,8 +1454,7 @@ msgstr "Fájl átnevezése"
 msgid "Please input new file name:"
 msgstr "Adj új nevet:"
 
-#: ../src/ptk/ptk-file-misc.c:151
-#: ../src/ptk/ptk-file-misc.c:172
+#: ../src/ptk/ptk-file-misc.c:151 ../src/ptk/ptk-file-misc.c:172
 #: ../src/ptk/ptk-file-misc.c:225
 msgid ""
 "The file name you specified already exists.\n"
@@ -1450,8 +1463,7 @@ msgstr ""
 "Már van ilyen nevű fájl.\n"
 "Adj más nevet:"
 
-#: ../src/ptk/ptk-file-misc.c:195
-#: ../src/ptk/ptk-file-misc.c:197
+#: ../src/ptk/ptk-file-misc.c:195 ../src/ptk/ptk-file-misc.c:197
 msgid "New Folder"
 msgstr "Új könyvtár"
 
@@ -1459,8 +1471,7 @@ msgstr "Új könyvtár"
 msgid "Input a name for the new folder:"
 msgstr "Adj nevet az új könyvtárnak:"
 
-#: ../src/ptk/ptk-file-misc.c:202
-#: ../src/ptk/ptk-file-misc.c:204
+#: ../src/ptk/ptk-file-misc.c:202 ../src/ptk/ptk-file-misc.c:204
 msgid "New File"
 msgstr "Új fájl"
 
@@ -1499,7 +1510,8 @@ msgid "Invalid Group"
 msgstr "Nem létező csoport"
 
 #: ../src/ptk/ptk-file-properties.c:760
-msgid "Do you want to recursively apply these changes to all files and sub-folders?"
+msgid ""
+"Do you want to recursively apply these changes to all files and sub-folders?"
 msgstr "Minden fájl és alkönyvtár módosítása?"
 
 #: ../src/edit-bookmarks.c:79
@@ -1528,8 +1540,7 @@ msgstr "Parancs nem található"
 msgid "Destination directory \"%1$s\" is contained in source \"%2$s\""
 msgstr "\"%1$s\" cél könyvtár szerepel a forrásban: \"%2$s\""
 
-#: ../src/vfs/vfs-volume-hal.c:475
-#: ../src/vfs/vfs-volume-hal.c:698
+#: ../src/vfs/vfs-volume-hal.c:475 ../src/vfs/vfs-volume-hal.c:698
 #, c-format
 msgid "%s Volume"
 msgstr "%s kötet"
@@ -1714,8 +1725,7 @@ msgid "Failed to connect to the HAL daemon: %s"
 msgstr "Nem tudtam kapcsolódni a HAL démonhoz: %s"
 
 #. definitely not a device that we're able to mount, eject or unmount
-#: ../src/vfs/vfs-volume-hal.c:1941
-#: ../src/vfs/vfs-volume-hal.c:1997
+#: ../src/vfs/vfs-volume-hal.c:1941 ../src/vfs/vfs-volume-hal.c:1997
 #, c-format
 msgid "Given device \"%s\" is not a volume or drive"
 msgstr "A megadott \"%s\" eszköz nem kötet vagy meghajtó"
@@ -1749,8 +1759,11 @@ msgstr "Érvénytelen csatolási opció \"%s\" kötet csatolása közben"
 
 #: ../src/vfs/vfs-volume-hal.c:2272
 #, c-format
-msgid "The volume \"%s\" uses the <i>%s</i> file system which is not supported by your system"
-msgstr "\"%s\" kötet <i>%s</i> fájlrendszert használja, melyet nem támogat rendszered"
+msgid ""
+"The volume \"%s\" uses the <i>%s</i> file system which is not supported by "
+"your system"
+msgstr ""
+"\"%s\" kötet <i>%s</i> fájlrendszert használja, melyet nem támogat rendszered"
 
 #: ../src/vfs/vfs-volume-hal.c:2274
 #, c-format
@@ -1775,13 +1788,18 @@ msgstr "Az alábbi kötet valószínűleg kézzel került csatolásra: \"%s\""
 
 #: ../src/vfs/vfs-volume-hal.c:2289
 #, c-format
-msgid "Blank discs cannot be mounted, use a CD recording application to record audio or data on the disc"
-msgstr "Az üres lemezek nem csatolhatók, használj egy CD-író alkalmazást hangsávok vagy adatok rögzítésére a lemezen"
+msgid ""
+"Blank discs cannot be mounted, use a CD recording application to record "
+"audio or data on the disc"
+msgstr ""
+"Az üres lemezek nem csatolhatók, használj egy CD-író alkalmazást hangsávok "
+"vagy adatok rögzítésére a lemezen"
 
 #: ../src/vfs/vfs-volume-hal.c:2300
 #, c-format
 msgid "Audio CDs cannot be mounted, use music players to play the audio tracks"
-msgstr "A hang CD-k nem csatolhatók, használj zenelejátszót a hangsávok lejátszására"
+msgstr ""
+"A hang CD-k nem csatolhatók, használj zenelejátszót a hangsávok lejátszására"
 
 #: ../src/desktop/desktop-window.c:193
 msgid "_Icons"
@@ -1797,7 +1815,7 @@ msgstr "Dokumentumaim"
 
 #: ../src/find-files.c:230
 msgid "Open Containing _Folder"
-msgstr ""
+msgstr "Tartalmazó _mappa megnyitása"
 
 #: ../src/find-files.c:677
 msgid "Select a folder"
@@ -1821,35 +1839,48 @@ msgstr "Utolsó módosítás"
 
 #~ msgid "Opened in Current Tab"
 #~ msgstr "Megnyitva e lapon"
+
 #~ msgid "Opened in New Tab"
 #~ msgstr "Megnyitva új lapon"
+
 #~ msgid "Opened in New Window"
 #~ msgstr "Megnyitva új ablakban"
+
 #~ msgid "Owner:"
 #~ msgstr "Tulajdonos:"
+
 #~ msgid "gksu or kdesu is not found"
 #~ msgstr "Nem találok ismert su felületet (gksu v. kdesu)"
+
 #~ msgid "Error: %s\n"
 #~ msgstr "Hiba: %s\n"
+
 #~ msgid ""
 #~ "The volume \"%s\" is not mounted.\n"
 #~ "Do you want to mount it?"
 #~ msgstr ""
 #~ "Az alábbi kötet nincs csatolva: \"%s\" \n"
 #~ "Csatoljuk?"
+
 #~ msgid "Source code taken from other projects:"
 #~ msgstr "Más projektekből származó kódok:"
+
 #~ msgid " * libmd5-rfc: Aladdin Enterprises"
 #~ msgstr " * libmd5-rfc: Aladdin Enterprises"
+
 #~ msgid " * Working area detection: Gary Kramlich"
 #~ msgstr " * Munkaterület érzékelés: Gary Kramlich"
+
 #~ msgid " * ExoIconView: os-cillation e.K, Anders Carlsson, & Benedikt Meurer"
 #~ msgstr ""
 #~ " * ExoIconView: os-cillation e.K, Anders Carlsson, & Benedikt Meurer"
+
 #~ msgid " * Text and icon renderer uese code from Jonathan Blandford"
 #~ msgstr " * A szöveg és ikon rajzoló Jonathan Blandford kódját használja"
+
 #~ msgid " * Desktop icons use code from Brian Tarricone"
 #~ msgstr " * Az asztali ikonok Brian Tarricone kódját használják"
+
 #~ msgid ""
 #~ " * Volume management uses code from following projects/authors:\n"
 #~ "     * gnome-vfs: David Zeuthen,\n"
@@ -1860,16 +1891,22 @@ msgstr "Utolsó módosítás"
 #~ "     * gnome-vfs: David Zeuthen,\n"
 #~ "     * thunar-vfs és libexo: Benedikt Meurer\n"
 #~ "     * gnome-mount: David Zeuthen"
+
 #~ msgid "PCMan File Manager"
 #~ msgstr "PCMan fájlkezelő"
+
 #~ msgid "Icon Theme:"
 #~ msgstr "Ikon téma:"
+
 #~ msgid "A_ddress:"
 #~ msgstr "_Cím:"
+
 #~ msgid " * xdgmime: Red Hat, Inc & Jonathan Blandford"
 #~ msgstr " * xdgmime: Red Hat, Inc & Jonathan Blandford"
+
 #~ msgid "_Full Screen"
 #~ msgstr "Teljes képernyő"
+
 #~ msgid ""
 #~ "File operation failed.\n"
 #~ "\n"
@@ -1882,14 +1919,18 @@ msgstr "Utolsó módosítás"
 #~ "Feldolgozatlan: \"%s\"\n"
 #~ "\n"
 #~ "%s"
+
 #~ msgid "Edit Bookmark"
 #~ msgstr "Könyvjelző szerkesztése"
+
 #~ msgid "Add to Bookmarks"
 #~ msgstr "Hozzáadás a könyvjelzőkhöz"
+
 #~ msgid "Enter new directory path:"
 #~ msgstr "Új könyvtár útvonala:"
+
 #~ msgid "Open Directory _Tree"
 #~ msgstr "Könyvtár_fa"
+
 #~ msgid "Open Terminal"
 #~ msgstr "Terminál megnyitása"
-
