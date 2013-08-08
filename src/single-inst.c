@@ -19,6 +19,10 @@
  *      MA 02110-1301, USA.
  */
 
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
 #include "single-inst.h"
 
 #include <string.h>
@@ -37,20 +41,14 @@ struct _SingleInstClient
     char* cwd;
     int screen_num;
     GPtrArray* argv;
+    const GOptionEntry* opt_entries;
+    SingleInstCallback callback;
     guint watch;
 };
 
-static int sock = -1;
-static GIOChannel* io_channel = NULL;
-static guint io_watch = 0;
-static char* prog_name = NULL;
+static GList* clients = NULL;
 
-static GList* clients;
-static SingleInstCallback callback = NULL;
-static GOptionEntry* opt_entries = NULL;
-static int screen_num = 0;
-
-static void get_socket_name(char* buf, int len);
+static void get_socket_name(SingleInstData* data, char* buf, int len);
 static gboolean on_server_socket_event(GIOChannel* ioc, GIOCondition cond, gpointer data);
 static gboolean on_client_socket_event(GIOChannel* ioc, GIOCondition cond, gpointer user_data);
 
@@ -66,9 +64,10 @@ static void single_inst_client_free(SingleInstClient* client)
     /* g_debug("free client"); */
 }
 
-static void pass_args_to_existing_instance()
+/* FIXME: need to document IPC protocol format */
+static void pass_args_to_existing_instance(const GOptionEntry* opt_entries, int screen_num, int sock)
 {
-    GOptionEntry* ent;
+    const GOptionEntry* ent;
     FILE* f = fdopen(sock, "w");
     char* escaped;
 
@@ -76,8 +75,8 @@ static void pass_args_to_existing_instance()
     char* cwd = g_get_current_dir();
     escaped = g_strescape(cwd, NULL);
     fprintf(f, "%s\n", escaped);
-    g_free(escaped);
     g_free(cwd);
+    cwd = escaped;
 
     /* pass screen number */
     fprintf(f, "%d\n", screen_num);
@@ -106,8 +105,14 @@ static void pass_args_to_existing_instance()
             break;
         }
         case G_OPTION_ARG_INT:
-            fprintf(f, "--%s\n%d\n", ent->long_name, *(gint*)ent->arg_data);
+        {
+            gint value = *(gint*)ent->arg_data;
+            if(value >= 0)
+            {
+                fprintf(f, "--%s\n%d\n", ent->long_name, value);
+            }
             break;
+        }
         case G_OPTION_ARG_STRING_ARRAY:
         case G_OPTION_ARG_FILENAME_ARRAY:
         {
@@ -119,8 +124,23 @@ static void pass_args_to_existing_instance()
                 for(; *strv; ++strv)
                 {
                     char* str = *strv;
-                    if(g_str_has_prefix(str, "--")) /* strings begining with -- */
-                        fprintf(f, "--\n"); /* prepend a -- to it */
+                    /* if not absolute path and not URI then prepend cwd or $HOME */
+                    if(str[0] == '~' && str[1] == '\0') ; /* pass "~" as is */
+                    else if(str[0] == '~' && str[1] == '/')
+                    {
+                        const char *envvar = g_getenv("HOME");
+                        if(envvar)
+                        {
+                            escaped = g_strescape(envvar, NULL);
+                            fprintf(f, "%s", escaped);
+                            g_free(escaped);
+                            str++;
+                        }
+                    }
+                    else if ((escaped = g_uri_parse_scheme(str))) /* a valid URI */
+                        g_free(escaped);
+                    else if(str[0] != '/')
+                        fprintf(f, "%s/", cwd);
                     escaped = g_strescape(str, NULL);
                     fprintf(f, "%s\n", escaped);
                     g_free(escaped);
@@ -132,7 +152,7 @@ static void pass_args_to_existing_instance()
             fprintf(f, "--%s\n%lf\n", ent->long_name, *(gdouble*)ent->arg_data);
             break;
         case G_OPTION_ARG_INT64:
-            fprintf(f, "--%s\n%lld\n", ent->long_name, *(gint64*)ent->arg_data);
+            fprintf(f, "--%s\n%lld\n", ent->long_name, (long long int)*(gint64*)ent->arg_data);
             break;
         case G_OPTION_ARG_CALLBACK:
             /* Not supported */
@@ -140,25 +160,34 @@ static void pass_args_to_existing_instance()
         }
     }
     fclose(f);
+    g_free(cwd);
 }
 
-SingleInstResult single_inst_init(const char* _prog_name, SingleInstCallback cb, GOptionEntry* _opt_entries, int _screen_num)
+/**
+ * single_inst_init
+ * @data: data filled by caller
+ * Return value: result from initialization
+ *
+ * Initializes single instance IPC, verifies if it's first instance and
+ * returns result of initialization.
+ * Data passed to single_inst_init() should be kept intact until next
+ * mandatory call to single_inst_finalize().
+ */
+SingleInstResult single_inst_init(SingleInstData* data)
 {
     struct sockaddr_un addr;
     int addr_len;
     int ret;
     int reuse;
 
-    if((sock = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
+    data->io_channel = NULL;
+    data->io_watch = 0;
+    if((data->sock = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
         return SINGLE_INST_ERROR;
-
-    prog_name = g_strdup(_prog_name);
-    opt_entries = _opt_entries;
-    screen_num = _screen_num;
 
     /* FIXME: use abstract socket? */
     addr.sun_family = AF_UNIX;
-    get_socket_name(addr.sun_path, sizeof(addr.sun_path));
+    get_socket_name(data, addr.sun_path, sizeof(addr.sun_path));
 #ifdef SUN_LEN
     addr_len = SUN_LEN(&addr);
 #else
@@ -166,10 +195,10 @@ SingleInstResult single_inst_init(const char* _prog_name, SingleInstCallback cb,
 #endif
 
     /* try to connect to existing instance */
-    if(connect(sock, (struct sockaddr*)&addr, addr_len) == 0)
+    if(connect(data->sock, (struct sockaddr*)&addr, addr_len) == 0)
     {
         /* connected successfully, pass args in opt_entries to server process as argv and exit. */
-        pass_args_to_existing_instance(_opt_entries);
+        pass_args_to_existing_instance(data->opt_entries, data->screen_num, data->sock);
         return SINGLE_INST_CLIENT;
     }
 
@@ -177,37 +206,41 @@ SingleInstResult single_inst_init(const char* _prog_name, SingleInstCallback cb,
     unlink(addr.sun_path); /* delete old socket file if it exists. */
 
     reuse = 1;
-    ret = setsockopt( sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse) );
-    if(bind(sock, (struct sockaddr*)&addr, addr_len) == -1)
-    {
-        close(sock);
-        sock = -1;
+    ret = setsockopt( data->sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse) );
+    if(ret || bind(data->sock, (struct sockaddr*)&addr, addr_len) == -1)
         return SINGLE_INST_ERROR;
-    }
 
-    callback = cb;
-
-    io_channel = g_io_channel_unix_new(sock);
-    g_io_channel_set_encoding(io_channel, NULL, NULL);
-    g_io_channel_set_buffered(io_channel, FALSE);
-
-    if(listen(sock, 5) == -1)
-    {
-        single_inst_finalize();
+    data->io_channel = g_io_channel_unix_new(data->sock);
+    if(data->io_channel == NULL)
         return SINGLE_INST_ERROR;
-    }
-    io_watch = g_io_add_watch(io_channel, G_IO_IN|G_IO_ERR|G_IO_PRI|G_IO_HUP, (GIOFunc)on_server_socket_event, NULL);
+
+    g_io_channel_set_encoding(data->io_channel, NULL, NULL);
+    g_io_channel_set_buffered(data->io_channel, FALSE);
+
+    if(listen(data->sock, 5) == -1)
+        return SINGLE_INST_ERROR;
+
+    data->io_watch = g_io_add_watch(data->io_channel,
+                                    G_IO_IN|G_IO_ERR|G_IO_PRI|G_IO_HUP,
+                                    (GIOFunc)on_server_socket_event, data);
     return SINGLE_INST_SERVER;
 }
 
-void single_inst_finalize()
+/**
+ * single_inst_finalize
+ * @data: data filled by call to single_inst_init()
+ *
+ * Terminates single instance IPC started by single_inst_init(). Should be
+ * always called after single_inst_init().
+ */
+void single_inst_finalize(SingleInstData* data)
 {
-    if(sock >=0 )
+    if(data->sock >=0)
     {
-        close(sock);
-        sock = -1;
+        close(data->sock);
+        data->sock = -1;
 
-        if(io_channel)
+        if(data->io_channel)
         {
             char sock_path[256];
 
@@ -219,22 +252,18 @@ void single_inst_finalize()
                 clients = NULL;
             }
 
-            if(io_watch)
+            if(data->io_watch)
             {
-                g_source_remove(io_watch);
-                io_watch = 0;
+                g_source_remove(data->io_watch);
+                data->io_watch = 0;
             }
-            g_io_channel_unref(io_channel);
-            io_channel = NULL;
+            g_io_channel_unref(data->io_channel);
+            data->io_channel = NULL;
             /* remove the file */
-            get_socket_name(sock_path, 256);
+            get_socket_name(data, sock_path, 256);
             unlink(sock_path);
-            callback = NULL;
-            opt_entries = NULL;
         }
     }
-    g_free(prog_name);
-    prog_name = NULL;
 }
 
 static inline void parse_args(SingleInstClient* client)
@@ -244,28 +273,42 @@ static inline void parse_args(SingleInstClient* client)
     char** argv = g_new(char*, argc + 1);
     memcpy(argv, client->argv->pdata, sizeof(char*) * argc);
     argv[argc] = NULL;
-    g_option_context_add_main_entries(ctx, opt_entries, NULL);
+    g_option_context_add_main_entries(ctx, client->opt_entries, NULL);
     g_option_context_parse(ctx, &argc, &argv, NULL);
     g_free(argv);
     g_option_context_free(ctx);
-    if(callback)
-        callback(client->cwd, client->screen_num);
+    if(client->callback)
+        client->callback(client->cwd, client->screen_num);
 }
 
-gboolean on_client_socket_event(GIOChannel* ioc, GIOCondition cond, gpointer user_data)
+static gboolean on_client_socket_event(GIOChannel* ioc, GIOCondition cond, gpointer user_data)
 {
     SingleInstClient* client = (SingleInstClient*)user_data;
 
     if ( cond & (G_IO_IN|G_IO_PRI) )
     {
-        char *line;
-        gsize term;
+        GString *str = g_string_sized_new(1024);
+        gsize got;
+        gchar ch;
+        GIOStatus status;
 
-        while(g_io_channel_read_line(ioc, &line, NULL, &term, NULL) == G_IO_STATUS_NORMAL)
+        while((status = g_io_channel_read_chars(ioc, &ch, 1, &got, NULL)) == G_IO_STATUS_NORMAL)
         {
-            if(line)
+            if(ch != '\n')
             {
-                line[term] = '\0';
+                if(ch < 0x20) /* zero or control char */
+                {
+                    g_error("client connection: invalid char %#x", (int)ch);
+                    break;
+                }
+                g_string_append_c(str, ch);
+                continue;
+            }
+            if(str->len)
+            {
+                char *line = g_strndup(str->str, str->len);
+
+                g_string_truncate(str, 0);
                 g_debug("line = %s", line);
                 if(!client->cwd)
                     client->cwd = g_strcompress(line);
@@ -283,6 +326,17 @@ gboolean on_client_socket_event(GIOChannel* ioc, GIOCondition cond, gpointer use
                 g_free(line);
             }
         }
+        g_string_free(str, TRUE);
+        switch(status)
+        {
+            case G_IO_STATUS_ERROR:
+                cond |= G_IO_ERR;
+                break;
+            case G_IO_STATUS_EOF:
+                cond |= G_IO_HUP;
+            default:
+                break;
+        }
     }
 
     if(cond & (G_IO_ERR|G_IO_HUP))
@@ -292,16 +346,18 @@ gboolean on_client_socket_event(GIOChannel* ioc, GIOCondition cond, gpointer use
             /* try to parse argv */
             parse_args(client);
         }
-        single_inst_client_free(client);
         clients = g_list_remove(clients, client);
+        single_inst_client_free(client);
         return FALSE;
     }
 
     return TRUE;
 }
 
-gboolean on_server_socket_event(GIOChannel* ioc, GIOCondition cond, gpointer data)
+static gboolean on_server_socket_event(GIOChannel* ioc, GIOCondition cond, gpointer user_data)
 {
+    SingleInstData* data = user_data;
+
     if ( cond & (G_IO_IN|G_IO_PRI) )
     {
         int client_sock = accept(g_io_channel_unix_get_fd(ioc), NULL, 0);
@@ -312,6 +368,8 @@ gboolean on_server_socket_event(GIOChannel* ioc, GIOCondition cond, gpointer dat
             g_io_channel_set_encoding(client->channel, NULL, NULL);
             client->screen_num = -1;
             client->argv = g_ptr_array_new();
+            client->callback = data->cb;
+            client->opt_entries = data->opt_entries;
             g_ptr_array_add(client->argv, g_strdup(g_get_prgname()));
             client->watch = g_io_add_watch(client->channel, G_IO_IN|G_IO_PRI|G_IO_ERR|G_IO_HUP,
                                            on_client_socket_event, client);
@@ -324,18 +382,15 @@ gboolean on_server_socket_event(GIOChannel* ioc, GIOCondition cond, gpointer dat
 
     if(cond & (G_IO_ERR|G_IO_HUP))
     {
-        char* _prog_name = prog_name;
-        prog_name = NULL;
-        single_inst_finalize();
-        single_inst_init(_prog_name, callback, opt_entries, screen_num);
-        g_free(_prog_name);
+        single_inst_finalize(data);
+        single_inst_init(data);
         return FALSE;
     }
 
     return TRUE;
 }
 
-void get_socket_name(char* buf, int len)
+static void get_socket_name(SingleInstData* data, char* buf, int len)
 {
     const char* dpy = g_getenv("DISPLAY");
     char* host = NULL;
@@ -350,7 +405,7 @@ void get_socket_name(char* buf, int len)
         dpynum = 0;
     g_snprintf(buf, len, "%s/.%s-socket-%s-%d-%s",
                 g_get_tmp_dir(),
-                prog_name,
+                data->prog_name,
                 host ? host : "",
                 dpynum,
                 g_get_user_name());

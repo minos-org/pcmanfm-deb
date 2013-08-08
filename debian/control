@@ -3,11 +3,10 @@ Section: utils
 Priority: optional
 Maintainer: Debian LXDE Maintainers <lxde-debian@lists.lxde.org>
 Uploaders:
- Andrew Lee (李健秋) <ajqlee@debian.org>, Daniel Baumann <daniel@debian.org>
+ Andrew Lee (李健秋) <ajqlee@debian.org>, Andriy Grytsenko <andrej@rep.kiev.ua>
 Build-Depends:
- debhelper (>= 9), autoconf, automake, intltool, libdbus-glib-1-dev,
- libfm-dev (>= 0.1.17), libgamin-dev, libgtk2.0-dev, libmenu-cache1-dev,
- libstartup-notification0-dev, libtool, pkg-config, python
+ debhelper (>= 9), intltool, pkg-config, libfm-gtk-dev (>= 1.0.1),
+ libgtk2.0-dev
 Standards-Version: 3.9.3
 Homepage: http://pcmanfm.sourceforge.net/
 Vcs-Browser: http://git.lxde.org/gitweb/?p=debian/pcmanfm.git
@@ -15,9 +14,10 @@ Vcs-Git: git://git.lxde.org/git/debian/pcmanfm.git
 
 Package: pcmanfm
 Architecture: any
-Depends: ${misc:Depends}, ${shlibs:Depends}, libfm-gtk-bin
+Depends: ${misc:Depends}, ${shlibs:Depends}
 Recommends:
- gvfs-backends, gvfs-fuse, lxde-icon-theme | gnome-icon-theme
+ gvfs-backends, gvfs-fuse,
+ lxde-icon-theme | gnome-icon-theme | oxygen-icon-theme | tango-icon-theme
 Description: extremely fast and lightweight file manager
  PCMan File Manager is a GTK+ based file manager, featuring:
  .
@@ -42,6 +42,7 @@ Priority: extra
 Architecture: any
 Depends: ${misc:Depends}, pcmanfm (= ${binary:Version})
 Description: extremely fast and lightweight file manager (debug)
- PCMan File Manager is a GTK+ based file manager.
+ PCMan File Manager is a GTK+ based file manager. It is a primary file
+ manager for the LXDE but can be used in any other desktop environment.
  .
  This package contains the debugging symbols.

@@ -1,7 +1,7 @@
 /*
  *      desktop.h
  *
- *      Copyright 2010 Hong Jen Yee (PCMan) <pcman.tw@gmail.com>
+ *      Copyright 2010 - 2012 Hong Jen Yee (PCMan) <pcman.tw@gmail.com>
  *
  *      This program is free software; you can redistribute it and/or modify
  *      it under the terms of the GNU General Public License as published by
@@ -41,14 +41,14 @@ G_BEGIN_DECLS
 typedef struct _FmDesktop           FmDesktop;
 typedef struct _FmDesktopClass      FmDesktopClass;
 typedef struct _FmDesktopItem       FmDesktopItem;
+typedef struct _FmBackgroundCache   FmBackgroundCache;
 
 struct _FmDesktop
 {
     GtkWindow parent;
-    GdkGC* gc;
+    /*< private >*/
     PangoLayout* pl;
-    GtkCellRendererPixbuf* icon_render;
-    GList* items;
+    FmCellRendererPixbuf* icon_render;
     GList* fixed_items;
     guint xpad;
     guint ypad;
@@ -76,6 +76,9 @@ struct _FmDesktop
     FmDndSrc* dnd_src;
     FmDndDest* dnd_dest;
     guint single_click_timeout_handler;
+    FmFolderModel* model;
+    guint cur_desktop;
+    gint monitor;
 };
 
 struct _FmDesktopClass
@@ -83,13 +86,12 @@ struct _FmDesktopClass
     GtkWindowClass parent_class;
 };
 
-FmFileInfoList* fm_desktop_get_selected_files(FmDesktop* desktop);
-FmPathList* fm_desktop_get_selected_paths(FmDesktop* desktop);
-
 GType       fm_desktop_get_type     (void);
-GtkWidget*  fm_desktop_new          (void);
+FmDesktop*  fm_desktop_new          (GdkScreen* screen, gint monitor);
 
-void fm_desktop_manager_init();
+FmDesktop*  fm_desktop_get          (guint screen, guint monitor);
+
+void fm_desktop_manager_init(gint on_screen);
 void fm_desktop_manager_finalize();
 
 G_END_DECLS
