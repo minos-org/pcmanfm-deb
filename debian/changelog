@@ -1,3 +1,18 @@
+pcmanfm (1.3.0-1) unstable; urgency=medium
+
+  * Merging upstream version 1.3.0 (Closes: #764289, #874753).
+  * Replacing 'http' with 'https' in debian/copyright file.
+  * Drop 01-Fix-potential-access-violation.patch, it's in the sources now.
+  * Replacing override 'debian-watch-may-check-gpg-signature' with
+    'debian-watch-does-not-check-gpg-signature'.
+  * Bump debhelper compat to 10.
+  * Bump Standards-Version to 4.1.4.
+  * Adding lxpolkit as a first alternative (Closes: #874657) (Thanks to:
+    Raphaël Hertzog <hertzog@debian.org>).
+  * Updating copyright years in debian/copyright file.
+
+ -- Andriy Grytsenko <andrej@rep.kiev.ua>  Sat, 21 Apr 2018 23:07:52 +0300
+
 pcmanfm (1.2.5-3) unstable; urgency=medium
 
   * Adding 01-Fix-potential-access-violation.patch from upstream

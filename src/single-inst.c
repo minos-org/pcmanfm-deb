@@ -2,7 +2,7 @@
  *      single-inst.c: simple IPC mechanism for single instance app
  *
  *      Copyright 2010 Hong Jen Yee (PCMan) <pcman.tw@gmail.com>
- *      Copyright 2012 Andriy Grytsenko (LStranger) <andrej@rep.kiev.ua>
+ *      Copyright 2012-2018 Andriy Grytsenko (LStranger) <andrej@rep.kiev.ua>
  *
  *      This program is free software; you can redistribute it and/or modify
  *      it under the terms of the GNU General Public License as published by
@@ -180,6 +180,7 @@ SingleInstResult single_inst_init(SingleInstData* data)
     int addr_len;
     int ret;
     int reuse;
+    char *dir_sep;
 
     data->io_channel = NULL;
     data->io_watch = 0;
@@ -205,6 +206,16 @@ SingleInstResult single_inst_init(SingleInstData* data)
 
     /* There is no existing server, and we are in the first instance. */
     unlink(addr.sun_path); /* delete old socket file if it exists. */
+
+    /* root-instance issue: /root/.cache might not exist, see
+       https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=874753 */
+    dir_sep = strrchr(addr.sun_path, '/');
+    if (dir_sep)
+    {
+        *dir_sep = '\0';
+        g_mkdir_with_parents(addr.sun_path, 0700);
+        *dir_sep = '/';
+    }
 
     reuse = 1;
     ret = setsockopt( data->sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse) );
@@ -404,11 +415,16 @@ static void get_socket_name(SingleInstData* data, char* buf, int len)
     }
     else
         dpynum = 0;
+#if GLIB_CHECK_VERSION(2, 28, 0)
+    g_snprintf(buf, len, "%s/%s-socket-%s-%d", g_get_user_runtime_dir(),
+               data->prog_name, host ? host : "", dpynum);
+#else
     g_snprintf(buf, len, "%s/.%s-socket-%s-%d-%s",
                 g_get_tmp_dir(),
                 data->prog_name,
                 host ? host : "",
                 dpynum,
                 g_get_user_name());
+#endif
 }
 

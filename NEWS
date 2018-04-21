@@ -1,3 +1,14 @@
+* Fixed potential access violation, use runtime user dir instead of tmp dir
+    for single instance socket.
+
+* Fixed an issue with losing icons on desktop, when file name has a '[' char.
+
+* Added a missing tooltip for 'New Window' toolbar button.
+
+* Fixed an issue when single instance socket' directory did not exist (see
+    https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=874753).
+
+
 Changes on 1.2.5 since 1.2.4:
 
 * Removed options to Cut, Remove and Rename from context menu on mounted
