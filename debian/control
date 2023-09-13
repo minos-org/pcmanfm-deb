@@ -1,25 +1,30 @@
 Source: pcmanfm
 Section: utils
 Priority: optional
-Maintainer: Debian LXDE Maintainers <pkg-lxde-maintainers@lists.alioth.debian.org>
-Uploaders:
- Andrew Lee (李健秋) <ajqlee@debian.org>, Andriy Grytsenko <andrej@rep.kiev.ua>
-Build-Depends:
- debhelper-compat (= 12), intltool, pkg-config, libfm-gtk-dev (>= 1.2.0),
- libgtk2.0-dev
-Standards-Version: 4.5.1
+Maintainer: Debian LXDE Maintainers <team+lxde@tracker.debian.org>
+Uploaders: Andrew Lee (李健秋) <ajqlee@debian.org>,
+           Andriy Grytsenko <andrej@rep.kiev.ua>,
+           ChangZhuo Chen (陳昌倬) <czchen@debian.org>
+Build-Depends: debhelper-compat (= 13),
+               intltool,
+               pkg-config,
+               libfm-gtk3-dev,
+               libgtk2.0-dev
+Standards-Version: 4.6.2
 Rules-Requires-Root: no
-Homepage: http://pcmanfm.sourceforge.net/
+Homepage: https://github.com/lxde/pcmanfm
 Vcs-Browser: https://salsa.debian.org/lxde-team/pcmanfm
 Vcs-Git: https://salsa.debian.org/lxde-team/pcmanfm.git
 
 Package: pcmanfm
 Architecture: any
-Depends: ${misc:Depends}, ${shlibs:Depends}, shared-mime-info
-Recommends:
- gvfs-backends, gvfs-fuse [!hurd-any],
- lxpolkit | polkit-1-auth-agent | policykit-1-gnome,
- lxde-icon-theme | gnome-icon-theme | oxygen-icon-theme | tango-icon-theme
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+         shared-mime-info
+Recommends: gvfs-backends,
+            gvfs-fuse [!hurd-any],
+            lxpolkit | polkit-1-auth-agent | policykit-1-gnome,
+            lxde-icon-theme | gnome-icon-theme | oxygen-icon-theme | tango-icon-theme
 Description: extremely fast and lightweight file manager
  PCMan File Manager is a GTK+ based file manager, featuring:
  .
