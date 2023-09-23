@@ -8,8 +8,7 @@ Uploaders: Andrew Lee (李健秋) <ajqlee@debian.org>,
 Build-Depends: debhelper-compat (= 13),
                intltool,
                pkg-config,
-               libfm-gtk3-dev,
-               libgtk2.0-dev
+               libfm-gtk3-dev
 Standards-Version: 4.6.2
 Rules-Requires-Root: no
 Homepage: https://github.com/lxde/pcmanfm
