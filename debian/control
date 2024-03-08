@@ -1,7 +1,8 @@
 Source: pcmanfm
 Section: utils
 Priority: optional
-Maintainer: Debian LXDE Maintainers <team+lxde@tracker.debian.org>
+Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
+XSBC-Original-Maintainer: Debian LXDE Maintainers <team+lxde@tracker.debian.org>
 Uploaders: Andrew Lee (李健秋) <ajqlee@debian.org>,
            Andriy Grytsenko <andrej@rep.kiev.ua>,
            ChangZhuo Chen (陳昌倬) <czchen@debian.org>
