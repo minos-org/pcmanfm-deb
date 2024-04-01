@@ -1,3 +1,9 @@
+pcmanfm (1.3.2-4build2) noble; urgency=medium
+
+  * No-change rebuild for CVE-2024-3094
+
+ -- William Grant <wgrant@ubuntu.com>  Mon, 01 Apr 2024 18:15:00 +1100
+
 pcmanfm (1.3.2-4build1) noble; urgency=medium
 
   * No-change rebuild against libglib2.0-0t64
