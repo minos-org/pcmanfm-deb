@@ -1,3 +1,11 @@
+pcmanfm (1.3.2-4.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * Backport upstream git commit 12abd7e17 to fix FTBFS with GCC 14
+    (Closes: #1075365)
+
+ -- Andreas Bombe <aeb@debian.org>  Sun, 20 Oct 2024 13:15:15 +0200
+
 pcmanfm (1.3.2-4) unstable; urgency=medium
 
   * Add d/salsa-ci.yml.
