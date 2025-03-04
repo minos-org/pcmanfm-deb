@@ -2,6 +2,7 @@
 //
 //      Copyright 2011 Hong Jen Yee (PCMan) <pcman.tw@gmail.com>
 //      Copyright 2012-2015 Andriy Grytsenko (LStranger) <andrej@rep.kiev.ua>
+//      Copyright 2020,2024 Ingo Brückl
 //
 //      This program is free software; you can redistribute it and/or modify
 //      it under the terms of the GNU General Public License as published by
@@ -53,7 +54,7 @@ static void on_open_folder_in_terminal(GtkAction* act, FmMainWin* win);
 /* Action entries for popup menu entries above */
 static GtkActionEntry folder_menu_actions[]=
 {
-    {"NewTab", GTK_STOCK_NEW, N_("Open in New T_ab"), NULL, NULL, G_CALLBACK(on_open_in_new_tab)},
+    {"NewTab", "tab-new", N_("Open in New T_ab"), NULL, NULL, G_CALLBACK(on_open_in_new_tab)},
     {"NewWin", GTK_STOCK_NEW, N_("Open in New Win_dow"), NULL, NULL, G_CALLBACK(on_open_in_new_win)},
     {"Search", GTK_STOCK_FIND, NULL, NULL, NULL, NULL},
     {"Term", "utilities-terminal", N_("Open in Termina_l"), NULL, NULL, G_CALLBACK(on_open_folder_in_terminal)},
@@ -373,14 +374,18 @@ static void on_folder_view_sel_changed(FmFolderView* fv, gint n_sel, FmTabPage* 
 #endif
             if(size_str)
             {
-                g_string_printf(str, "\"%s\" (%s) %s",
+                /* Note to translators: this is the information (name, size, type)
+                   about the selected file in the status bar */
+                g_string_printf(str, _("\"%s\" (%s) %s"),
                             fm_file_info_get_disp_name(fi),
                             size_str ? size_str : "",
                             fm_file_info_get_desc(fi));
             }
             else
             {
-                g_string_printf(str, "\"%s\" %s",
+                /* Note to translators: this is the information (name, type)
+                   about the selected file in the status bar */
+                g_string_printf(str, _("\"%s\" %s"),
                             fm_file_info_get_disp_name(fi),
                             fm_file_info_get_desc(fi));
             }

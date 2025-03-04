@@ -3,6 +3,7 @@
  *
  *      Copyright 2010 - 2012 Hong Jen Yee (PCMan) <pcman.tw@gmail.com>
  *      Copyright 2012-2017 Andriy Grytsenko (LStranger) <andrej@rep.kiev.ua>
+ *      Copyright 2024 Ingo Brückl
  *
  *      This program is free software; you can redistribute it and/or modify
  *      it under the terms of the GNU General Public License as published by
@@ -1267,7 +1268,7 @@ static AtkObject *fm_desktop_accessible_ref_selection(AtkSelection *selection,
         item = items->data;
         if (item->item->is_selected)
             if (i-- == 0)
-                return g_object_ref(item);
+                return (AtkObject *)g_object_ref(item);
     }
     return NULL;
 }
@@ -1454,7 +1455,7 @@ static AtkObject *fm_desktop_accessible_ref_child(AtkObject *accessible,
     item = g_list_nth_data(priv->items, index);
     if (!item)
         return NULL;
-    return g_object_ref(item);
+    return (AtkObject *)g_object_ref(item);
 }
 
 static void fm_desktop_accessible_initialize(AtkObject *accessible, gpointer data)
@@ -3494,12 +3495,16 @@ static gboolean on_button_release(GtkWidget* w, GdkEventButton* evt)
         /* restore after drag */
         queue_layout_items(self);
     }
-    else if(fm_config->single_click && evt->button == 1)
+    else if((fm_config->single_click && evt->button == 1)
+#if FM_CHECK_VERSION(1, 4, 0)
+         || (fm_config->middle_click && evt->button == 2)
+#endif
+                                                         )
     {
         GtkTreeIter it;
         FmDesktopItem* clicked_item = hit_test(self, &it, evt->x, evt->y);
         if(clicked_item)
-            /* left single click */
+            /* single click */
             fm_launch_file_simple(GTK_WINDOW(w), NULL, clicked_item->fi, pcmanfm_open_folder, w);
     }
 
