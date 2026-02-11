@@ -1,3 +1,9 @@
+pcmanfm (1.4.0-1build1) resolute; urgency=medium
+
+  * No-change mass rebuild for Ubuntu 26.04 (LP: #2132257)
+
+ -- Sebastien Bacher <seb128@debian.org>  Wed, 11 Feb 2026 23:35:07 +0100
+
 pcmanfm (1.4.0-1) unstable; urgency=medium
 
   [ Ingo Brückl ]
