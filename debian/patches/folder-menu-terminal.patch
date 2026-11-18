@@ -1,0 +1,59 @@
+Description: the folder menu opens the folder in a terminal
+ A click on the background of a folder opens its menu (new file, paste, sort,
+ properties) without a way to open a terminal there; F4 and the menu of a
+ folder icon have one. The folder menu gets the same action as F4, right after
+ Create New, in libfm's placeholder for file operations.
+Author: minos <https://minos.io>
+Forwarded: no
+Last-Update: 2026-11-18
+---
+--- a/src/main-win.c
++++ b/src/main-win.c
+@@ -1208,6 +1208,29 @@
+         pcmanfm_open_folder_in_terminal(GTK_WINDOW(win), path);
+ }
+ 
++/* the folder's own menu, the one a click on its background opens, has the
++   terminal too: the same action as F4, right after Create New, in libfm's
++   place for file operations */
++static const char folder_popup_term_xml[] =
++"<popup>"
++  "<placeholder name='CustomFileOps'>"
++    "<menuitem action='FolderTerm'/>"
++  "</placeholder>"
++"</popup>";
++
++static void update_folder_popup(FmFolderView* fv, GtkWindow* window,
++                                GtkUIManager* ui, GtkActionGroup* act_grp,
++                                FmFileInfoList* files)
++{
++    static const GtkActionEntry folder_term =
++        {"FolderTerm", "utilities-terminal", N_("Open Current Folder in _Terminal"),
++         NULL, NULL, G_CALLBACK(on_open_in_terminal)};
++
++    gtk_action_group_set_translation_domain(act_grp, NULL);
++    gtk_action_group_add_actions(act_grp, &folder_term, 1, window);
++    gtk_ui_manager_add_ui_from_string(ui, folder_popup_term_xml, -1, NULL);
++}
++
+ #if FM_CHECK_VERSION(1, 0, 2)
+ static void on_search(GtkAction* act, FmMainWin* win)
+ {
+@@ -2169,7 +2192,7 @@
+ 
+     /* update folder popup */
+     fm_folder_view_set_active(folder_view, FALSE);
+-    fm_folder_view_add_popup(folder_view, GTK_WINDOW(win), NULL);
++    fm_folder_view_add_popup(folder_view, GTK_WINDOW(win), update_folder_popup);
+     fm_folder_view_set_active(folder_view, (page == win->current_page));
+ }
+ 
+@@ -2344,7 +2367,7 @@
+                      G_CALLBACK(on_side_pane_chdir), win);
+ 
+     /* create folder popup and apply shortcuts from it */
+-    fm_folder_view_add_popup(tab_page->folder_view, GTK_WINDOW(win), NULL);
++    fm_folder_view_add_popup(tab_page->folder_view, GTK_WINDOW(win), update_folder_popup);
+     /* disable it yet - it will be enabled in on_notebook_switch_page() */
+     fm_folder_view_set_active(tab_page->folder_view, FALSE);
+ 
